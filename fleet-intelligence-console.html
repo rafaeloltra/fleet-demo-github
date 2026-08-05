@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Fleet Intelligence Console — AusPost NGIP Hackathon</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  /* Real AusPost webfont, pulled directly from auspost.com.au's own clientlib
+     (APTypeProText-*.woff2) — self-hosted here rather than hotlinked since the
+     files aren't served with CORS headers for cross-origin <link> use. Only
+     "Text" weights are served on their homepage bundle (no separate "Display"
+     face was found), so it covers both display and body per AusPost's own
+     fallback stack (font-family:APTypeProDisplay,-apple-system,sans-serif). */
+  @font-face{font-family:'APTypeProText';font-style:normal;font-weight:400;src:url('fonts/APTypeProText-Regular.woff2') format('woff2');font-display:swap;}
+  @font-face{font-family:'APTypeProText';font-style:normal;font-weight:500;src:url('fonts/APTypeProText-Medium.woff2') format('woff2');font-display:swap;}
+  @font-face{font-family:'APTypeProText';font-style:normal;font-weight:700;src:url('fonts/APTypeProText-Bold.woff2') format('woff2');font-display:swap;}
+  :root{
+    /* Real Australia Post design tokens, pulled from auspost.com.au's own CSS
+       custom properties (--auspost-red-500/600, --neutral-*, --system-*
+       semantic colours) — not an approximation. Light theme, matching the
+       predominantly white/light layout of the real site. */
+    --red:#DC1928;      /* --auspost-red-500 */
+    --red-dim:#B01420;  /* --auspost-red-600 */
+    --ink:#0D0D10;      /* --ink-900, used here as primary text colour */
+    --paper:#F5F5F5;    /* --neutral-100, page background */
+    --panel:#FFFFFF;    /* --neutral-0, card/panel background */
+    --panel-light:#EDEDED; /* --neutral-200-ish, hover / tinted panel bg */
+    --steel:#6D6D72;    /* --neutral-600, muted text (legible on white) */
+    --line:#E2E2E2;     /* --neutral-400, borders on a light bg */
+    --amber:#B25F00;    /* --system-yellow-700 — the -600 token (#EDA51F) is
+                           too light to read as text on white, so use their
+                           darker "on-light" step of the same semantic colour */
+    --green:#1D964F;    /* --system-green-600 (their own "success" token) */
+    --blue:#3587DA;     /* --system-blue-600 (their own "info" token) */
+    --purple:#7D5FDE;   /* --system-purple-700, darker step for contrast */
+    --font-display:'APTypeProText', -apple-system, sans-serif;
+    --font-body:'APTypeProText', -apple-system, sans-serif;
+    --font-mono:'IBM Plex Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;background:var(--paper);color:var(--ink);font-family:var(--font-body);}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px;}
+
+  .app{display:grid;grid-template-columns:220px 1fr;grid-template-rows:56px 1fr;height:100vh;}
+
+  /* Top bar */
+  .topbar{grid-column:1/3;display:flex;align-items:center;justify-content:space-between;
+    padding:0 20px;border-bottom:1px solid var(--line);background:var(--panel);}
+  .brand{display:flex;align-items:center;gap:10px;font-family:var(--font-display);font-weight:700;font-size:15px;letter-spacing:.3px;}
+  .brand .mark{width:22px;height:22px;border-radius:5px;background:var(--red);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;}
+  .status{display:flex;align-items:center;gap:8px;font-family:var(--font-mono);font-size:11px;color:var(--steel);}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(29,150,79,.6);animation:pulse 1.6s infinite;}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(29,150,79,.55);}70%{box-shadow:0 0 0 8px rgba(29,150,79,0);}100%{box-shadow:0 0 0 0 rgba(29,150,79,0);}}
+  .clock{font-family:var(--font-mono);font-size:12px;color:var(--steel);}
+
+  /* Sidebar */
+  .side{background:var(--panel);border-right:1px solid var(--line);padding:16px 10px;display:flex;flex-direction:column;gap:4px;}
+  .navlabel{font-size:10px;letter-spacing:1.2px;color:var(--steel);text-transform:uppercase;padding:10px 10px 6px;}
+  .navitem{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;color:var(--steel);border:1px solid transparent;}
+  .navitem:hover{background:var(--panel-light);}
+  .navitem.active{background:var(--panel-light);border-color:var(--line);color:var(--ink);}
+  .navitem .sw{width:8px;height:8px;border-radius:2px;flex-shrink:0;}
+  .navitem .count{margin-left:auto;font-family:var(--font-mono);font-size:11px;color:var(--steel);}
+
+  /* Main */
+  .main{padding:18px 22px;overflow-y:auto;}
+  .view{display:none;}
+  .view.active{display:block;}
+
+  h1.pagehead{font-family:var(--font-display);font-size:20px;margin:0 0 3px;color:var(--ink);}
+  .sub{color:var(--steel);font-size:12.5px;margin:0 0 16px;}
+
+  /* Ticker */
+  .ticker-wrap{border:1px solid var(--line);background:var(--panel);border-radius:10px;overflow:hidden;margin-bottom:18px;position:relative;height:34px;}
+  .ticker-label{position:absolute;left:0;top:0;bottom:0;display:flex;align-items:center;padding:0 12px;background:var(--red);font-family:var(--font-mono);font-size:10px;letter-spacing:.5px;z-index:2;color:#fff;}
+  .ticker{position:absolute;left:130px;right:0;top:0;bottom:0;display:flex;align-items:center;white-space:nowrap;font-family:var(--font-mono);font-size:11.5px;color:var(--ink);animation:scroll 22s linear infinite;}
+  @keyframes scroll{from{transform:translateX(0);}to{transform:translateX(-50%);}}
+  .ticker span{margin-right:36px;color:var(--steel);}
+  .ticker span b{color:var(--blue);font-weight:500;}
+
+  /* Grid */
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;}
+  .card .lbl{font-size:10.5px;color:var(--steel);text-transform:uppercase;letter-spacing:.8px;}
+  .card .val{font-family:var(--font-display);font-size:26px;margin-top:4px;color:var(--ink);}
+  .card .delta{font-size:11px;margin-top:3px;}
+  .up{color:var(--green);} .down{color:var(--red);} .warn{color:var(--amber);}
+
+  .cols{display:grid;grid-template-columns:1.3fr 1fr;gap:14px;align-items:start;}
+
+  /* Map — real Melbourne metro tiles via Leaflet/OpenStreetMap, vehicles
+     plotted near their real geozone coordinates. */
+  .mapcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;}
+  .mapcard h3{margin:0 0 10px;font-family:var(--font-display);font-size:14px;color:var(--ink);font-weight:600;}
+  #map{width:100%;height:340px;background:var(--line);border-radius:8px;}
+  .leaflet-container{background:var(--line);font-family:var(--font-body);}
+  .truck-tooltip{background:var(--panel-light);border:1px solid var(--line);color:var(--ink);font-family:var(--font-mono);font-size:10px;padding:2px 6px;border-radius:4px;box-shadow:none;}
+  .truck-tooltip::before{display:none;}
+  .leaflet-control-attribution{background:rgba(255,255,255,.8)!important;color:var(--steel)!important;font-size:9px!important;}
+  .leaflet-control-attribution a{color:var(--steel)!important;}
+  .leaflet-control-zoom a{background:var(--panel-light)!important;color:var(--ink)!important;border-color:var(--line)!important;}
+
+  /* Feed */
+  .feedcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;height:340px;display:flex;flex-direction:column;}
+  .feedcard h3{margin:0 0 8px;font-family:var(--font-display);font-size:14px;color:var(--ink);font-weight:600;display:flex;justify-content:space-between;align-items:center;}
+  .feed{overflow-y:auto;flex:1;display:flex;flex-direction:column-reverse;gap:8px;}
+  .rec{border-left:3px solid var(--blue);background:var(--panel-light);border-radius:0 8px 8px 0;padding:8px 10px;font-size:12px;line-height:1.4;}
+  .rec.high{border-color:var(--red);}
+  .rec.med{border-color:var(--amber);}
+  .rec .meta{font-family:var(--font-mono);font-size:10px;color:var(--steel);margin-bottom:3px;display:flex;justify-content:space-between;}
+  .rec .conf{color:var(--green);}
+
+  .btnrow{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
+  button.act{background:var(--red);color:#fff;border:none;padding:9px 14px;border-radius:7px;font-family:var(--font-body);font-weight:600;font-size:12.5px;cursor:pointer;}
+  button.act:hover{background:var(--red-dim);}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--ink);padding:9px 14px;border-radius:7px;font-size:12.5px;cursor:pointer;}
+  button.ghost:hover{border-color:var(--steel);}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  th{text-align:left;color:var(--steel);font-weight:500;font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;padding:8px 10px;border-bottom:1px solid var(--line);}
+  td{padding:8px 10px;border-bottom:1px solid var(--line);font-family:var(--font-mono);font-size:12px;}
+  .pill{padding:2px 8px;border-radius:20px;font-size:10.5px;font-family:var(--font-body);font-weight:600;}
+  .pill.low{background:rgba(29,150,79,.15);color:var(--green);}
+  .pill.mid{background:rgba(237,165,31,.15);color:var(--amber);}
+  .pill.high{background:rgba(220,25,40,.12);color:var(--red-dim);}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <div class="brand"><div class="mark">P</div>Fleet Intelligence Console</div>
+    <div class="status"><span class="dot" id="topbar-dot"></span> <span id="topbar-status-text">Connecting to fleet-mcp-server…</span></div>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+
+  <div class="side">
+    <div class="navlabel">Views</div>
+    <div class="navitem active" data-view="overview"><span class="sw" style="background:var(--blue)"></span>Live Overview</div>
+    <div class="navitem" data-view="safety"><span class="sw" style="background:var(--red)"></span>Safety<span class="count" id="count-safety">0</span></div>
+    <div class="navitem" data-view="delivery"><span class="sw" style="background:var(--green)"></span>Delivery Ops<span class="count" id="count-delivery">0</span></div>
+    <div class="navitem" data-view="maintenance"><span class="sw" style="background:var(--amber)"></span>Maintenance<span class="count" id="count-maintenance">0</span></div>
+    <div class="navitem" data-view="live"><span class="sw" style="background:var(--purple)"></span>Live Pipeline<span class="count" id="count-live">0</span></div>
+    <div class="navlabel" style="margin-top:14px;">Demo controls</div>
+    <div style="padding:6px 10px;">
+      <button class="act" id="liveInjectBtn" style="width:100%;margin-bottom:8px;background:var(--purple);">⚡ Inject REAL engine spike</button>
+      <button class="act" id="liveTrafficBtn" style="width:100%;margin-bottom:8px;background:var(--purple);">🚧 Inject REAL traffic incident</button>
+      <button class="ghost" id="liveResetBtn" style="width:100%;border-color:var(--red);color:var(--red-dim);">🗑 Reset real pipeline</button>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- OVERVIEW -->
+    <div class="view active" id="view-overview">
+      <h1 class="pagehead">Live Overview</h1>
+      <p class="sub">One raw event stream — vehicle.telemetry — feeding three independent business consumers. No dashboard here talks to any other.</p>
+
+      <div class="ticker-wrap">
+        <div class="ticker-label">RAW EVENTS</div>
+        <div class="ticker" id="ticker"></div>
+      </div>
+
+      <div class="grid grid-overview">
+        <div class="card"><div class="lbl">Vehicles online</div><div class="val" id="kpi-vehicles">—</div><div class="delta up" id="kpi-vehicles-delta">connecting…</div></div>
+        <div class="card"><div class="lbl">Events / sec</div><div class="val" id="kpi-eps">—</div><div class="delta">measured, all topics</div></div>
+        <div class="card"><div class="lbl">Open AI recommendations</div><div class="val" id="kpi-recs">0</div><div class="delta warn" id="kpi-recs-delta">—</div></div>
+        <div class="card"><div class="lbl">Avg parcels delivered/hr</div><div class="val" id="kpi-eta">—</div><div class="delta">fleet-wide, delivery.performance.events</div></div>
+        <div class="card"><div class="lbl">Today's impacted deliveries</div><div class="val" id="kpi-impacted-deliveries">0</div><div class="delta warn" id="kpi-impacted-deliveries-delta">parcels at risk</div></div>
+        <div class="card"><div class="lbl">Today's impacted revenue</div><div class="val" id="kpi-impacted-revenue">$0</div><div class="delta warn">est. @ $14.50/parcel</div></div>
+      </div>
+
+      <div class="cols">
+        <div class="mapcard">
+          <h3>Fleet position — Melbourne metro</h3>
+          <div id="map"></div>
+        </div>
+        <div class="feedcard">
+          <h3>AI Advisor output <span style="font-size:10px;color:var(--steel);font-weight:400;">AWS Bedrock</span></h3>
+          <div class="feed" id="feed-overview"></div>
+        </div>
+      </div>
+
+      <div class="feedcard" style="height:auto;margin-top:14px;">
+        <h3>Network conditions <span style="font-size:10px;color:var(--steel);font-weight:400;">weather.conditions · traffic.incidents</span></h3>
+        <table>
+          <thead><tr><th>Geozone</th><th>Weather</th><th>Traffic</th></tr></thead>
+          <tbody id="network-conditions"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SAFETY -->
+    <div class="view" id="view-safety">
+      <h1 class="pagehead">Safety Dashboard</h1>
+      <p class="sub">Consumes <b>driver.risk.events</b> + <b>ai.safety.recommendations</b>. Built for the driver safety / OH&S team.</p>
+      <div class="grid">
+        <div class="card"><div class="lbl">High risk drivers now</div><div class="val" id="safety-high">0</div><div class="delta warn">threshold: risk &gt; 70</div></div>
+        <div class="card"><div class="lbl">Harsh events (last 5 min)</div><div class="val" id="safety-harsh">0</div></div>
+        <div class="card"><div class="lbl">Overspeed events</div><div class="val" id="safety-speed">0</div></div>
+        <div class="card"><div class="lbl">High-severity risk events (15 min)</div><div class="val" id="safety-highrisk">0</div><div class="delta" style="color:var(--steel);">driver.risk.events</div></div>
+      </div>
+      <div class="cols">
+        <div class="feedcard" style="grid-column:1/3;">
+          <h3>Driver risk table</h3>
+          <div style="overflow-y:auto;flex:1;">
+            <table id="safety-table"><thead><tr><th>Vehicle</th><th>Driver risk</th><th>Status</th><th>Last event</th></tr></thead><tbody></tbody></table>
+          </div>
+        </div>
+      </div>
+      <div class="feedcard" style="height:auto;margin-top:14px;">
+        <h3>Safety recommendations</h3>
+        <div class="feed" id="feed-safety" style="max-height:280px;"></div>
+      </div>
+    </div>
+
+    <!-- DELIVERY -->
+    <div class="view" id="view-delivery">
+      <h1 class="pagehead">Delivery Operations Dashboard</h1>
+      <p class="sub">Consumes <b>vehicle.telemetry</b> + <b>parcel.volume</b> + <b>ai.delivery.recommendations</b>. Built for the network / dispatch team.</p>
+      <div class="grid">
+        <div class="card"><div class="lbl">On-time rate</div><div class="val" id="del-ontime">—</div></div>
+        <div class="card"><div class="lbl">Routes disrupted</div><div class="val" id="del-disrupt">0</div></div>
+        <div class="card"><div class="lbl">Avg speed (network)</div><div class="val" id="del-speed">—</div></div>
+        <div class="card"><div class="lbl">Parcels onboard (fleet)</div><div class="val" id="del-parcels">0</div></div>
+      </div>
+      <div class="feedcard" style="height:auto;">
+        <h3>Route reassignment recommendations</h3>
+        <div class="feed" id="feed-delivery" style="max-height:280px;"></div>
+      </div>
+    </div>
+
+    <!-- MAINTENANCE -->
+    <div class="view" id="view-maintenance">
+      <h1 class="pagehead">Fleet Maintenance Dashboard</h1>
+      <p class="sub">Consumes <b>maintenance.alerts</b> + <b>ai.maintenance.recommendations</b>. Built for the fleet maintenance scheduler.</p>
+      <div class="grid">
+        <div class="card"><div class="lbl">Vehicles at risk</div><div class="val" id="maint-risk">0</div><div class="delta warn">threshold: risk &gt; 70</div></div>
+        <div class="card"><div class="lbl">Open work orders</div><div class="val" id="maint-wo">—</div><div class="delta" style="color:var(--steel);">maintenance.alerts · fleet-mcp-server</div></div>
+        <div class="card"><div class="lbl">Avg engine temp</div><div class="val" id="maint-temp">—</div></div>
+        <div class="card"><div class="lbl">Avg tyre pressure</div><div class="val" id="maint-tyre">—</div></div>
+      </div>
+      <div class="feedcard" style="height:auto;">
+        <h3>Maintenance recommendations</h3>
+        <div class="feed" id="feed-maintenance" style="max-height:280px;"></div>
+      </div>
+    </div>
+
+    <!-- LIVE PIPELINE -->
+    <div class="view" id="view-live">
+      <h1 class="pagehead">Live Pipeline</h1>
+      <p class="sub">Raw diagnostics for the same pipeline every dashboard in this console now reads from — connection state, pipeline mode/source, and the unfiltered recommendation stream across all three domains (<b>fleet-mcp-server</b>'s HTTP API, backed by the real Confluent Cloud + Flink + Bedrock pipeline built in <code>terraform/</code>).</p>
+
+      <div id="live-status" class="feedcard" style="height:auto;flex-direction:row;align-items:center;gap:10px;margin-bottom:14px;">
+        <span class="dot" id="live-dot" style="background:var(--steel);animation:none;"></span>
+        <span id="live-status-text" style="font-family:var(--font-mono);font-size:12px;color:var(--steel);">Connecting to http://localhost:8787 …</span>
+      </div>
+
+      <div class="grid">
+        <div class="card"><div class="lbl">Vehicles reporting</div><div class="val" id="live-vehicles">—</div><div class="delta" id="live-source">—</div></div>
+        <div class="card"><div class="lbl">Avg engine temp</div><div class="val" id="live-temp">—</div></div>
+        <div class="card"><div class="lbl">High risk (safety+maint)</div><div class="val" id="live-risk">—</div><div class="delta warn">threshold: risk &gt; 70</div></div>
+        <div class="card"><div class="lbl">Open AI recommendations</div><div class="val" id="live-recs">—</div><div class="delta" id="live-recs-delta">real Bedrock output</div></div>
+      </div>
+
+      <div class="feedcard" style="height:auto;">
+        <h3>Real recommendations <span style="font-size:10px;color:var(--steel);font-weight:400;">ai.safety / ai.delivery / ai.maintenance.recommendations</span></h3>
+        <div class="feed" id="feed-live" style="max-height:360px;"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ---------- setup ---------- */
+// Everything below reads from fleet-mcp-server's real HTTP API - no
+// client-side simulation left. In LIVE mode that API is backed by a real
+// Kafka consumer over Confluent Cloud (context-engine.js); with no
+// Confluent Cloud env vars set, fleet-mcp-server falls back to its own
+// SIMULATED in-memory engine so the console still has something to show
+// (clearly labeled via summary.source below), but the browser itself never
+// fabricates a number.
+const LIVE_API = 'http://localhost:8787';
+let liveConnected = false;
+
+async function liveFetch(path, opts){
+  const res = await fetch(LIVE_API + path, opts);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();
+}
+
+/* ---------- clock ---------- */
+function tickClock(){
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-AU', {hour12:false});
+}
+setInterval(tickClock, 1000); tickClock();
+
+/* ---------- nav ---------- */
+document.querySelectorAll('.navitem').forEach(item=>{
+  item.addEventListener('click', ()=>{
+    document.querySelectorAll('.navitem').forEach(i=>i.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    item.classList.add('active');
+    document.getElementById('view-'+item.dataset.view).classList.add('active');
+  });
+});
+
+/* ---------- connection status (drives the top bar + Live Pipeline tab) ---------- */
+function setLiveStatus(connected, detail){
+  liveConnected = connected;
+  const fallbackDetail = connected
+    ? ('Connected — ' + LIVE_API)
+    : 'Not connected. Run: cd fleet-mcp-server && npm start (see SETUP.md)';
+  const msg = detail || fallbackDetail;
+  [
+    [document.getElementById('topbar-dot'), document.getElementById('topbar-status-text')],
+    [document.getElementById('live-dot'), document.getElementById('live-status-text')],
+  ].forEach(([dot, text])=>{
+    if (!dot || !text) return;
+    dot.style.background = connected ? 'var(--green)' : 'var(--red)';
+    dot.style.animation = connected ? 'pulse 1.6s infinite' : 'none';
+    text.textContent = msg;
+  });
+  if (!connected){
+    const woEl = document.getElementById('maint-wo');
+    if (woEl) woEl.textContent = '—';
+  }
+}
+
+/* ---------- map render (real Melbourne metro, Leaflet + standard OSM tiles) ----------
+   Markers are keyed by real vehicle ID and created/removed as vehicles
+   appear in /api/vehicles, positioned at their real lat/lng from
+   vehicle.telemetry - no client-side movement simulation. */
+const leafletMap = L.map('map', { zoomControl:true, attributionControl:true })
+  .setView([-37.85, 145.0], 10);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  subdomains: 'abc',
+  maxZoom: 19,
+}).addTo(leafletMap);
+
+const truckMarkers = {};
+function renderMap(vehicles){
+  const seen = new Set();
+  vehicles.forEach(v=>{
+    if (v.lat == null || v.lng == null) return;
+    seen.add(v.id);
+    let marker = truckMarkers[v.id];
+    if (!marker){
+      marker = L.circleMarker([v.lat, v.lng], {
+        radius: 5, color:'#0D0D10', weight:1, fillColor:'#3587DA', fillOpacity:1,
+      }).addTo(leafletMap);
+      marker.bindTooltip(v.id, { permanent:true, direction:'top', offset:[0,-4], className:'truck-tooltip' });
+      truckMarkers[v.id] = marker;
+    }
+    marker.setLatLng([v.lat, v.lng]);
+    const spiked = (v.engineTemp||0) > 100 || (v.maintRisk||0) > 85;
+    const fillColor = spiked ? '#DC1928' : ((v.driverRisk||0) > 70 ? '#EDA51F' : '#3587DA');
+    marker.setStyle({ fillColor, radius: spiked ? 7 : 5 });
+  });
+  Object.keys(truckMarkers).forEach(id=>{
+    if (!seen.has(id)){ leafletMap.removeLayer(truckMarkers[id]); delete truckMarkers[id]; }
+  });
+}
+
+/* ---------- ticker (fires only on genuine new telemetry, diffed by datetime) ---------- */
+const tickerEl = document.getElementById('ticker');
+const lastSeenDatetime = {};
+function tickerEvent(v){
+  const span = document.createElement('span');
+  span.innerHTML = `vehicle.telemetry · <b>${v.id}</b> [${v.geozone||'—'}] speed=${(v.speed||0).toFixed(0)}km/h temp=${(v.engineTemp||0).toFixed(0)}°C fuel=${(v.fuel||0).toFixed(0)}% parcels=${v.parcelsOnboard||0}`;
+  tickerEl.appendChild(span);
+  while (tickerEl.children.length > 40) tickerEl.removeChild(tickerEl.firstChild);
+}
+function updateTicker(vehicles){
+  vehicles.forEach(v=>{
+    const ts = v.datetime || v.lastUpdated;
+    if (ts && lastSeenDatetime[v.id] !== ts){
+      lastSeenDatetime[v.id] = ts;
+      tickerEvent(v);
+    }
+  });
+}
+
+/* ---------- recommendation feeds ---------- */
+function feedSeverityClass(severity){
+  if (severity === 'high' || severity === 'behind_schedule') return 'high';
+  if (severity === 'medium' || severity === 'med') return 'med';
+  return '';
+}
+function renderFeed(elId, recs){
+  const feed = document.getElementById(elId);
+  if (!feed || !recs) return;
+  feed.innerHTML = '';
+  // feed uses column-reverse, so append in reverse chronological order (oldest of this batch first)
+  [...recs].reverse().forEach(r=>{
+    const div = document.createElement('div');
+    div.className = 'rec ' + feedSeverityClass(r.severity);
+    const when = r.timestamp ? new Date(r.timestamp).toLocaleTimeString('en-AU', {hour12:false}) : '';
+    div.innerHTML = `<div class="meta"><span>ai.${r.domain}.recommendations · ${r.vehicleId||''}</span><span class="conf">${when}</span></div>${r.text}`;
+    feed.appendChild(div);
+  });
+}
+
+/* ---------- safety table ---------- */
+function renderSafetyTable(vehicles){
+  const tbody = document.querySelector('#safety-table tbody');
+  tbody.innerHTML = '';
+  vehicles.slice().sort((a,b)=>(b.driverRisk||0)-(a.driverRisk||0)).forEach(v=>{
+    const risk = v.driverRisk || 0;
+    const pill = risk>70?'high':risk>40?'mid':'low';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${v.id}</td><td>${risk.toFixed(0)}</td><td><span class="pill ${pill}">${pill.toUpperCase()}</span></td><td>${v.overspeed?'overspeed':'normal'}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+/* ---------- network conditions (weather + traffic) ---------- */
+function renderNetworkConditions(weatherList, trafficIncidents){
+  const el = document.getElementById('network-conditions');
+  if (!el) return;
+  const rows = weatherList.map(w=>{
+    const active = trafficIncidents.find(i=>i.geozone===w.geozone);
+    const wetClass = (w.condition==='light rain'||w.condition==='heavy rain'||w.condition==='fog') ? 'warn' : '';
+    return `<tr>
+      <td>${w.geozone}</td>
+      <td class="${wetClass}">${w.condition} · ${Math.round(w.tempC||0)}°C</td>
+      <td>${active ? `<span class="pill high">${active.type}</span>` : '<span class="pill low">clear</span>'}</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = rows;
+}
+
+/* ---------- business-impact KPIs (Overview "Today" tiles) ----------
+   AVG_PARCEL_REVENUE is a documented assumption (avg. revenue per parcel
+   delivery), not a real figure - there's no real pricing data source in
+   this demo. Severity weighting reflects that a "congestion/roadworks"
+   disruption usually still completes (partial SLA risk), while a
+   "collision reported/road closure" more often means a genuinely missed
+   delivery window (full value at risk). The trigger itself is now real:
+   each real traffic incident (deduped by geozone+timestamp so a still-
+   active incident isn't re-counted every poll) is intersected with the
+   real vehicles/parcel load in that geozone at first sighting. */
+const AVG_PARCEL_REVENUE = 14.50;
+const SEVERITY_REVENUE_WEIGHT = { high:1.0, medium:0.6, low:0.35 };
+let impactedDeliveriesToday = 0;
+let impactedRevenueToday = 0;
+const countedIncidentKeys = new Set();
+function updateImpactKPIs(vehicles, trafficIncidents){
+  const byGeozone = {};
+  vehicles.forEach(v=>{ if (v.geozone) (byGeozone[v.geozone] ||= []).push(v); });
+  trafficIncidents.forEach(inc=>{
+    const key = inc.geozone + '|' + inc.timestamp;
+    if (countedIncidentKeys.has(key)) return;
+    countedIncidentKeys.add(key);
+    const parcels = (byGeozone[inc.geozone] || []).reduce((s,v)=>s+(v.parcelsOnboard||0),0);
+    if (parcels > 0){
+      impactedDeliveriesToday += parcels;
+      impactedRevenueToday += parcels * AVG_PARCEL_REVENUE * (SEVERITY_REVENUE_WEIGHT[inc.severity] ?? 0.5);
+    }
+  });
+  document.getElementById('kpi-impacted-deliveries').textContent = impactedDeliveriesToday.toLocaleString('en-AU');
+  document.getElementById('kpi-impacted-revenue').textContent = '$' + Math.round(impactedRevenueToday).toLocaleString('en-AU');
+}
+
+/* ---------- per-view render functions ---------- */
+function renderOverview(summary, vehicles, weatherList, trafficIncidents, recs){
+  document.getElementById('kpi-vehicles').textContent = summary.vehiclesOnline ?? '—';
+  document.getElementById('kpi-vehicles-delta').textContent = 'reporting';
+  document.getElementById('kpi-eps').textContent = summary.eventsPerSecond ?? '—';
+  const counts = summary.recommendationCounts || {};
+  const openRecs = (counts.safety||0) + (counts.delivery||0) + (counts.maintenance||0);
+  document.getElementById('kpi-recs').textContent = openRecs;
+  document.getElementById('kpi-recs-delta').textContent = openRecs ? `safety ${counts.safety||0} · delivery ${counts.delivery||0} · maint ${counts.maintenance||0}` : '—';
+  document.getElementById('kpi-eta').textContent = summary.avgParcelsDeliveredPerHour != null ? summary.avgParcelsDeliveredPerHour.toFixed(1) + '/hr' : '—';
+
+  updateImpactKPIs(vehicles, trafficIncidents);
+  renderMap(vehicles);
+  updateTicker(vehicles);
+  renderNetworkConditions(weatherList, trafficIncidents);
+  renderFeed('feed-overview', recs);
+
+  document.getElementById('count-safety').textContent = counts.safety || 0;
+  document.getElementById('count-delivery').textContent = counts.delivery || 0;
+  document.getElementById('count-maintenance').textContent = counts.maintenance || 0;
+  document.getElementById('count-live').textContent = summary.openRecommendations ?? 0;
+}
+
+function renderSafety(summary, vehicles, recs){
+  document.getElementById('safety-high').textContent = summary.highDriverRiskCount ?? 0;
+  document.getElementById('safety-harsh').textContent = summary.harshBrakingEventsRecent ?? 0;
+  document.getElementById('safety-speed').textContent = summary.overspeedEventsRecent ?? 0;
+  document.getElementById('safety-highrisk').textContent = summary.highRiskEventsRecent ?? 0;
+  renderSafetyTable(vehicles);
+  renderFeed('feed-safety', recs);
+}
+
+function renderDelivery(summary, vehicles, recs){
+  document.getElementById('del-ontime').textContent = summary.onTimeRatePct != null ? summary.onTimeRatePct + '%' : '—';
+  document.getElementById('del-disrupt').textContent = summary.routesDisruptedCount ?? 0;
+  const avgSpeed = vehicles.length ? vehicles.reduce((s,v)=>s+(v.speed||0),0) / vehicles.length : 0;
+  document.getElementById('del-speed').textContent = vehicles.length ? avgSpeed.toFixed(0) + ' km/h' : '—';
+  document.getElementById('del-parcels').textContent = summary.totalParcelsOnboard ?? 0;
+  renderFeed('feed-delivery', recs);
+}
+
+function renderMaintenance(summary, vehicles, recs){
+  document.getElementById('maint-risk').textContent = summary.highMaintenanceRiskCount ?? 0;
+  document.getElementById('maint-wo').textContent = summary.openWorkOrders ?? '—';
+  document.getElementById('maint-temp').textContent = summary.avgEngineTempC != null ? summary.avgEngineTempC.toFixed(0) + '°C' : '—';
+  document.getElementById('maint-tyre').textContent = summary.avgTyrePressurePsi != null ? summary.avgTyrePressurePsi.toFixed(0) + ' psi' : '—';
+  renderFeed('feed-maintenance', recs);
+}
+
+function renderLivePipeline(summary, recs){
+  document.getElementById('live-vehicles').textContent = summary.vehiclesOnline ?? '—';
+  document.getElementById('live-source').textContent = summary.source || '—';
+  document.getElementById('live-temp').textContent = summary.avgEngineTempC != null ? summary.avgEngineTempC.toFixed(1) + '°C' : '—';
+  document.getElementById('live-risk').textContent = (summary.highDriverRiskCount||0) + (summary.highMaintenanceRiskCount||0);
+  document.getElementById('live-recs').textContent = summary.openRecommendations ?? '—';
+  renderFeed('feed-live', recs);
+}
+
+/* ---------- unified poll loop - the only source of data for every view ---------- */
+async function poll(){
+  try {
+    await liveFetch('/api/health');
+    const [summary, vehicles, weatherList, trafficIncidents, recsAll, recsSafety, recsDelivery, recsMaintenance] = await Promise.all([
+      liveFetch('/api/fleet-summary'),
+      liveFetch('/api/vehicles'),
+      liveFetch('/api/weather'),
+      liveFetch('/api/traffic-incidents?limit=30'),
+      liveFetch('/api/recommendations?limit=20'),
+      liveFetch('/api/recommendations?domain=safety&limit=12'),
+      liveFetch('/api/recommendations?domain=delivery&limit=12'),
+      liveFetch('/api/recommendations?domain=maintenance&limit=12'),
+    ]);
+    setLiveStatus(true, (summary.source==='live-confluent-cloud' ? 'LIVE — real Confluent Cloud + Flink + Bedrock' : 'Connected — fleet-mcp-server SIMULATED fallback (no Confluent Cloud env vars set)') + (summary.consumerCaughtUp===false ? ' · consumer still catching up…' : ''));
+
+    renderOverview(summary, vehicles, weatherList, trafficIncidents, recsAll);
+    renderSafety(summary, vehicles, recsSafety);
+    renderDelivery(summary, vehicles, recsDelivery);
+    renderMaintenance(summary, vehicles, recsMaintenance);
+    renderLivePipeline(summary, recsAll);
+  } catch (err) {
+    setLiveStatus(false);
+  }
+}
+poll();
+setInterval(poll, 3000);
+
+/* ---------- demo controls ---------- */
+document.getElementById('liveInjectBtn').addEventListener('click', async ()=>{
+  if (!liveConnected){ alert('Not connected to fleet-mcp-server — see SETUP.md to enable LIVE mode.'); return; }
+  try {
+    const result = await liveFetch('/api/inject-incident', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    alert('Injected real engine spike on ' + result.id + '. ' + (result.note||''));
+  } catch (err) {
+    alert('Failed to inject: ' + err.message);
+  }
+});
+document.getElementById('liveTrafficBtn').addEventListener('click', async ()=>{
+  if (!liveConnected){ alert('Not connected to fleet-mcp-server — see SETUP.md to enable LIVE mode.'); return; }
+  try {
+    const result = await liveFetch('/api/inject-traffic-incident', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    alert('Injected real traffic incident in ' + result.geozone + '. ' + (result.note||''));
+  } catch (err) {
+    alert('Failed to inject: ' + err.message);
+  }
+});
+document.getElementById('liveResetBtn').addEventListener('click', async ()=>{
+  if (!liveConnected){ alert('Not connected to fleet-mcp-server — see SETUP.md to enable LIVE mode.'); return; }
+  const ok = confirm(
+    'This PERMANENTLY deletes all real data in the 10 Confluent Cloud topics — ' +
+    'every seeded telemetry record and every real Bedrock recommendation generated so far. ' +
+    'This cannot be undone.\n\nThe topics, their schemas, and the 6 Flink jobs are NOT touched — ' +
+    'only the messages inside them.\n\nContinue?'
+  );
+  if (!ok) return;
+  const btn = document.getElementById('liveResetBtn');
+  const original = btn.textContent;
+  btn.textContent = 'Resetting… (~15-20s)';
+  btn.disabled = true;
+  try {
+    const result = await liveFetch('/api/reset', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    if (result.failed && result.failed.length){
+      alert('Reset finished with errors on: ' + result.failed.map(f=>f.topic).join(', '));
+    } else {
+      alert('Reset complete — purged ' + result.purged + '/' + result.total + ' topics. ' + (result.note||''));
+    }
+    poll();
+  } catch (err) {
+    alert('Reset failed: ' + err.message);
+  } finally {
+    btn.textContent = original;
+    btn.disabled = false;
+  }
+});
+
+</script>
+</body>
+</html>

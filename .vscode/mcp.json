@@ -1,0 +1,19 @@
+{
+  "inputs": [
+    {
+      "id": "confluent_rtce_token",
+      "type": "promptString",
+      "description": "Confluent RTCE Basic-auth token (base64 of GLOBAL-scoped API_KEY:API_SECRET) — see fleet-mcp-server/SETUP-RTCE-COPILOT.md",
+      "password": true
+    }
+  ],
+  "servers": {
+    "confluent-rtce": {
+      "type": "http",
+      "url": "https://mcp.ap-southeast-2.aws.confluent.cloud/mcp/v1/context-engine/organizations/1410f376-ed07-4b70-a4fe-984080b37065/environments/env-dp78m7/kafka-clusters/lkc-7ynxrrj",
+      "headers": {
+        "Authorization": "Basic ${input:confluent_rtce_token}"
+      }
+    }
+  }
+}

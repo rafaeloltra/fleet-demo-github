@@ -1,0 +1,30 @@
+# OS
+.DS_Store
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Python
+__pycache__/
+*.pyc
+
+# Terraform (mirrors terraform/.gitignore; kept at root as a backstop)
+**/*.tfstate
+**/*.tfstate.*
+**/.terraform/
+**/.terraform.lock.hcl
+**/terraform.tfvars
+**/*.auto.tfvars
+**/crash.log
+
+# Claude Code local/machine-specific settings
+.claude/settings.local.json
+
+# Generated demo data (regenerate via seed-data/generate_seed_data.py)
+out/
+seed-data/out/
+seed-data/__pycache__/
+
+# Ad-hoc Confluent Cloud console export, not part of the checked-in project
+Download messages as CSV_2026-07-31T00_13_42.917Z.csv
