@@ -1,7 +1,10 @@
-# Fleet Context Engine — MCP Server Setup
+# Fleet Context Engine — Setup
 
-This runs the fleet context engine as an MCP server so Claude can query
-fleet state and answer questions about it directly.
+This runs the fleet context engine: a background Kafka consumer plus a
+small HTTP API that `fleet-intelligence-console.html` polls for every view.
+It has no MCP server of its own — **Confluent Cloud's native RTCE (Real-Time
+Context Engine) is the only MCP path into this project's data** (see step 3),
+for both Claude Code/Desktop and VS Code Copilot.
 
 It runs in one of two modes, chosen automatically based on whether the
 Confluent Cloud environment variables below are set:
@@ -13,23 +16,21 @@ Confluent Cloud environment variables below are set:
 - **SIMULATED** (default, no setup required) — an in-memory simulator
   generates synthetic fleet state, same as the HTML dashboard.
 
-Check stderr on startup to see which mode is active (MCP servers talk over
-stdio for the protocol itself, so this diagnostic line goes to stderr, not
-stdout):
+Check stderr on startup to see which mode is active:
 ```
 [fleet-context-engine] mode: LIVE (real Confluent Cloud + Flink + Bedrock)
 ```
 
-## 1. Install and test it runs
+## 1. Install and run it
 
 ```bash
-cd fleet-mcp-server
+cd fleet-context-engine
 npm install
 npm start
 ```
 
-It should sit there quietly aside from the mode line above (MCP servers
-talk over stdio, not a normal terminal UI). Press Ctrl+C to stop.
+Check stderr for the mode line above, then `[fleet-context-engine] HTTP API
+listening on http://localhost:8787`. Press Ctrl+C to stop.
 
 ## 1b. (Optional) Enable LIVE mode
 
@@ -53,69 +54,31 @@ npm start
 already has `CloudClusterAdmin` - covers both directions with one
 credential set, simpler than juggling a separate read-only identity.)
 
-If you connect this to Claude Desktop/Code (steps 2-3 below), those apps
-launch the server themselves, so the env vars need to be in that launching
-process's environment too - either export them in the shell you launch
-Claude Desktop from, or add an `"env"` block to the `mcpServers` config
-entry in step 2 with the same key/value pairs.
-
 The consumer takes ~15-30s to catch up on first connect (Kafka consumer
-group join + tailing from the beginning of all 10 topics) - the first tool
-call right after startup may show partial/empty data until it catches up.
+group join + tailing from the beginning of all 10 topics) - the HTTP API
+may show partial/empty data until it catches up.
 
-## 2. Connect it to Claude Desktop
-
-Edit your Claude Desktop config file:
-
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-
-Add an entry under `mcpServers` (create the file/section if it doesn't exist):
-
-```json
-{
-  "mcpServers": {
-    "fleet-context-engine": {
-      "command": "node",
-      "args": ["/absolute/path/to/fleet-mcp-server/index.js"]
-    }
-  }
-}
-```
-
-Restart Claude Desktop. You should see "fleet-context-engine" appear as a
-connected tool (check the 🔌 / tools icon in the chat input). Then just ask,
-for example:
-
-- "What's the current state of the fleet?"
-- "Which vehicles are high risk for maintenance right now?"
-- "Trigger a demo incident on VH-1004 and tell me what recommendations come out of it."
-
-## 3. Connect it to Claude Code instead
-
-```bash
-claude mcp add fleet-context-engine -- node /absolute/path/to/fleet-mcp-server/index.js
-```
-
-Then in a Claude Code session, just ask fleet questions the same way — Claude
-will call the tools automatically when relevant.
-
-## 4. For the actual demo moment
+## 2. For the actual demo moment
 
 The strongest way to show this live: have the HTML dashboard open on one
-screen and a Claude Desktop/Code window open next to it. Ask Claude "which
-vehicles need attention right now" — Claude's answer, generated purely from
-calling `get_fleet_summary` / `list_high_risk_vehicles`, will match exactly
-what's on screen, because both are reading the same context engine's state.
-That's the whole pitch: **the dashboard and Claude are two views onto one
-live source of truth, not two separate systems that might disagree.**
+screen and an MCP client connected to RTCE (step 3 below — Claude
+Code/Desktop or VS Code Copilot) open next to it. Ask it something like
+"what does `vehicle.telemetry` look like for a high-risk vehicle right
+now" — the answer, read straight from the real topics via RTCE, will line
+up with what's on screen, because both are ultimately reading the same
+real pipeline. That's the pitch: **the dashboard and RTCE are two views
+onto one live source of truth, not two separate systems that might
+disagree.**
 
-## 5. Alternative: connect Claude directly to Confluent's native MCP (Real-Time Context Engine)
+## 3. Connect an MCP client via Confluent's native RTCE (Real-Time Context Engine)
 
 Confluent Cloud has its own fully-managed MCP server (RTCE) that reads
 straight from the real topics — no code from this folder involved at all.
-It's a different, narrower tool than `fleet-context-engine` (see comparison
-below), and a good complement for ad-hoc raw-data questions.
+This is the only MCP path into this project.
+
+The steps below are **Option 1: Claude Code/Desktop**. For **Option 2: VS
+Code Copilot**, use `fleet-context-engine/SETUP-RTCE-COPILOT.md` instead —
+same RTCE server, Copilot-specific config format.
 
 **Verified working end-to-end** against this project's environment
 (`env-ko352m`) via `claude mcp add --transport http` — `claude mcp list`
@@ -127,7 +90,8 @@ is the part that previously 401'd.
 supported region (`ap-southeast-2` qualifies), and RTCE toggled on per topic
 — Console: cluster → **Topics** → **Context engine** column → **Off** status
 link → turn on (or `confluent rtce rtce-topic create --cloud aws --region
-ap-southeast-2 --topic-name <topic>`).
+ap-southeast-2 --topic-name <topic>`; already handled for all 10 topics by
+`terraform/rtce.tf`).
 
 **1. Create a Global-scoped API key** — this is the part that 401s if you
 skip it: a regular Kafka/Cloud API key (even with `EnvironmentAdmin`) does
@@ -200,14 +164,13 @@ Claude Desktop) — same as connecting any other MCP server mid-session.
 
 **5. Ask it things like** "what topics are available", "describe the schema
 for vehicle.telemetry", "show me the 10 most recent records in
-traffic.incidents" — Claude calls RTCE's `list_topics` / `get_metadata` /
+traffic.incidents" — it calls RTCE's `list_topics` / `get_metadata` /
 `query_data` tools directly against the real topics.
 
-**RTCE vs. `fleet-context-engine` (steps 1-4 above):** RTCE only exposes
-generic, raw topic-query tools — no fleet-specific reasoning
-(`get_fleet_summary`, `list_high_risk_vehicles`) and no demo-injection
-tools. Use `fleet-context-engine` for the actual demo narrative; use RTCE
-for quick "show me the raw data" exploration alongside it.
+RTCE only exposes generic, raw topic-query tools — no fleet-specific
+reasoning (fleet summaries, high-risk vehicle lists) and no demo-injection.
+Use the dashboard (step 2 above) for the curated demo narrative; use RTCE
+for ad-hoc "show me the raw data" exploration alongside it.
 
 ## How LIVE mode actually reads the pipeline
 
@@ -216,9 +179,7 @@ consumer subscribed to all 10 real topics from the beginning, and rebuilds
 the exact same in-memory shape the simulator uses (`vehicles` Map,
 `weather` Map, rolling logs) as messages arrive - so every public method
 (`getFleetSummary`, `listHighRisk`, etc.) is still an instant, synchronous
-read from memory. The MCP tool surface in `index.js` didn't need to change
-at all going from simulated to live, since it only ever called the context
-engine's public methods.
+read from memory, served over the HTTP API in `http-server.js`.
 
 **Why a background consumer instead of querying Flink per request:** that
 was the first approach tried, and it doesn't work well for this - each
@@ -228,16 +189,18 @@ the compute pool's CFU capacity. Tailing Kafka directly in the background
 (the same pattern the pipeline itself uses) is both faster and avoids that
 contention entirely.
 
-**Demo-injection tools in LIVE mode**: `inject_demo_incident` and
-`inject_demo_traffic_incident` produce a real Confluent-wire-encoded record
-(via `confluent-client.js`) directly to `vehicle.telemetry` /
-`traffic.incidents`. This flows through the *real* Flink pipeline exactly
-like any other record - the real business-derivation job picks it up, and
-the real Bedrock-backed model generates a real recommendation - so give it
-a beat (usually well under a minute) before checking
-`get_recent_recommendations` for the result. In simulated mode these same
-tools instead update in-memory state instantly, since there's no real
-pipeline to route through.
+**Demo-injection in LIVE mode**: the HTML console's "Inject REAL engine
+spike" / "Inject REAL traffic incident" buttons (`POST /api/inject-incident`
+/ `POST /api/inject-traffic-incident` on the HTTP API, calling
+`contextEngine.injectIncident()` / `injectTrafficIncident()`) produce a real
+Confluent-wire-encoded record (via `confluent-client.js`) directly to
+`vehicle.telemetry` / `traffic.incidents`. This flows through the *real*
+Flink pipeline exactly like any other record - the real business-derivation
+job picks it up, and the real Bedrock-backed model generates a real
+recommendation - so give it a beat (usually well under a minute) before
+checking the AI Advisor feed or querying via RTCE for the result. In
+simulated mode these same buttons instead update in-memory state instantly,
+since there's no real pipeline to route through.
 
 **Resetting LIVE mode**: `POST /api/reset` on the HTTP API (also exposed as
 the "🗑 Reset real pipeline" button on the HTML console's Live Pipeline
@@ -250,6 +213,6 @@ cleaner to delete existing messages, then restoring the original value
 which would also delete their registered schemas and require restarting
 all 6 persistent Flink jobs. The topics, their schemas, the Flink jobs, and
 the Bedrock connection are all left completely untouched; only the
-messages inside the topics are deleted. There's no equivalent MCP tool for
-this (HTTP API + console button only), since it's a destructive admin
-action rather than something Claude should be able to trigger conversationally.
+messages inside the topics are deleted. HTTP API + console button only,
+since it's a destructive admin action, not something to expose
+conversationally.

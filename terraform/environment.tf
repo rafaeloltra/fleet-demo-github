@@ -1,4 +1,4 @@
-# A dedicated environment keeps everything for this hackathon demo isolated
+# A dedicated environment keeps everything for this demo isolated
 # and easy to tear down with `terraform destroy`.
 resource "confluent_environment" "fleet" {
   display_name = var.environment_name

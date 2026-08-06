@@ -8,8 +8,8 @@
 // clicks.
 //
 // Produces REAL wire-encoded records via confluent-client.js's
-// produceRecord() - same mechanism index.js's inject_demo_incident tool
-// uses - so every number downstream (Flink-derived events, Bedrock
+// produceRecord() - same mechanism the HTTP API's /api/inject-incident
+// endpoint uses - so every number downstream (Flink-derived events, Bedrock
 // recommendations) is genuinely computed from these, not faked in this
 // process's memory.
 //

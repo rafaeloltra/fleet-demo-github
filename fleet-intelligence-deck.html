@@ -273,7 +273,7 @@
     <div class="eyebrow">Confluent Cloud · Apache Flink · Amazon Bedrock</div>
     <h1 class="big">Fleet Intelligence,<br>in Real Time</h1>
     <p class="lede">From raw vehicle telemetry to an AI-generated recommendation — before the truck is back at depot.</p>
-    <div class="kicker">AusPost Fleet Telemetry Demo — NGIP Hackathon 2026</div>
+    <div class="kicker">Fleet Telemetry Demo</div>
   </section>
 
   <!-- 2. PROBLEM -->
@@ -335,7 +335,8 @@
       Flink SQL pipeline that derives three independent business events: <b style="color:var(--safety)">safety</b>,
       <b style="color:var(--delivery)">delivery</b>, and <b style="color:var(--maint)">maintenance</b>. Each event is
       handed to a Bedrock-backed model for a genuinely generated recommendation, published back to
-      Kafka as its own topic — readable by a dashboard, a downstream system, or Claude, identically.
+      Kafka as its own topic — readable by a dashboard, a downstream system, or an MCP client
+      (Claude Code/Desktop, VS Code Copilot), identically.
     </p>
   </section>
 
@@ -388,8 +389,8 @@
       <li><div class="step-body"><b>Open the Fleet Intelligence Console</b><span>12 simulated vehicles on a real Melbourne metro map, three business dashboards, live business-impact KPIs — running instantly, zero setup.</span></div></li>
       <li><div class="step-body"><b>Inject an engine spike</b><span>Watch Safety, Delivery, and Maintenance react independently, on screen, in real time — including today's impacted-deliveries and at-risk-revenue counters.</span></div></li>
       <li><div class="step-body"><b>Switch to the Live Pipeline tab</b><span>Same console, now reading real data through the actual Confluent + Flink + Bedrock backend.</span></div></li>
-      <li><div class="step-body"><b>Ask Claude "which vehicles need attention right now"</b><span>Same answer as the dashboard — Claude and the console read the same source of truth via MCP (this project's own fleet-context-engine, or Confluent's native Real-Time Context Engine directly).</span></div></li>
-      <li><div class="step-body"><b>Trigger a real incident, from Claude or the console</b><span>A genuine Bedrock-generated recommendation lands end to end — usually in under a minute.</span></div></li>
+      <li><div class="step-body"><b>Ask your MCP client (Option 1: Claude Code/Desktop, Option 2: VS Code Copilot) to show the latest vehicle.telemetry records</b><span>Same real topic the dashboard reads — connected via Confluent's native Real-Time Context Engine (RTCE), the only MCP path into this project's data.</span></div></li>
+      <li><div class="step-body"><b>Trigger a real incident, from the console</b><span>A genuine Bedrock-generated recommendation lands end to end — usually in under a minute.</span></div></li>
     </ol>
   </section>
 

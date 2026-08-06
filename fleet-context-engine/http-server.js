@@ -1,7 +1,7 @@
 // http-server.js
 //
-// A small JSON API over the same context engine the MCP tools use, so the
-// browser-based HTML console (fleet-intelligence-console.html) can show
+// A small JSON API over the context engine, so the browser-based HTML
+// console (fleet-intelligence-console.html) can show
 // real pipeline data too. Browsers can't safely hold Confluent Cloud
 // credentials or speak the Kafka wire protocol directly, so this process
 // (which already has both, for the MCP server) is the proxy - the browser

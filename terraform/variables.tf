@@ -11,9 +11,9 @@ variable "confluent_cloud_api_secret" {
 }
 
 variable "environment_name" {
-  description = "Name of the Confluent Cloud environment for this hackathon demo."
+  description = "Name of the Confluent Cloud environment for this demo."
   type        = string
-  default     = "fleet-telemetry-hackathon"
+  default     = "fleet-telemetry-demo"
 }
 
 variable "cluster_name" {

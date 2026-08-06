@@ -1,0 +1,13 @@
+{
+  "name": "fleet-context-engine",
+  "version": "1.0.0",
+  "description": "Real-time fleet context engine (Kafka consumer + HTTP API) for the fleet telemetry demo.",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "kafkajs": "^2.2.4"
+  }
+}

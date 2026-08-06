@@ -3,7 +3,7 @@
     {
       "id": "confluent_rtce_token",
       "type": "promptString",
-      "description": "Confluent RTCE Basic-auth token (base64 of GLOBAL-scoped API_KEY:API_SECRET) — see fleet-mcp-server/SETUP-RTCE-COPILOT.md",
+      "description": "Confluent RTCE Basic-auth token (base64 of GLOBAL-scoped API_KEY:API_SECRET) — see fleet-context-engine/SETUP-RTCE-COPILOT.md",
       "password": true
     }
   ],

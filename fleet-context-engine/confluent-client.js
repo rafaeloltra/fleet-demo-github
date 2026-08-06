@@ -3,8 +3,8 @@
 // Produces wire-encoded records (Confluent's magic-byte + schema-id
 // framing, since the raw/context topics use 'value.format' = 'json-registry'
 // - see terraform/flink_statements.tf) to the real Confluent Cloud
-// pipeline, for the demo-injection MCP tools (inject_demo_incident /
-// inject_demo_traffic_incident). Reading real data is handled separately
+// pipeline, for the demo-injection HTTP endpoints (/api/inject-incident /
+// /api/inject-traffic-incident). Reading real data is handled separately
 // in context-engine.js via a background Kafka consumer (kafkajs) - ad-hoc
 // Flink SQL pull queries were tried first for reads and dropped: each one
 // is a real Flink job submission that takes 10-60+s and competes with the

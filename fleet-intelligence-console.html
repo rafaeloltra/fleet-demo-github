@@ -2,29 +2,29 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Fleet Intelligence Console — AusPost NGIP Hackathon</title>
+<title>Fleet Intelligence Console</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-  /* Real AusPost webfont, pulled directly from auspost.com.au's own clientlib
+  /* Real webfont, pulled directly from a live retail site's own clientlib
      (APTypeProText-*.woff2) — self-hosted here rather than hotlinked since the
      files aren't served with CORS headers for cross-origin <link> use. Only
      "Text" weights are served on their homepage bundle (no separate "Display"
-     face was found), so it covers both display and body per AusPost's own
+     face was found), so it covers both display and body per that site's own
      fallback stack (font-family:APTypeProDisplay,-apple-system,sans-serif). */
   @font-face{font-family:'APTypeProText';font-style:normal;font-weight:400;src:url('fonts/APTypeProText-Regular.woff2') format('woff2');font-display:swap;}
   @font-face{font-family:'APTypeProText';font-style:normal;font-weight:500;src:url('fonts/APTypeProText-Medium.woff2') format('woff2');font-display:swap;}
   @font-face{font-family:'APTypeProText';font-style:normal;font-weight:700;src:url('fonts/APTypeProText-Bold.woff2') format('woff2');font-display:swap;}
   :root{
-    /* Real Australia Post design tokens, pulled from auspost.com.au's own CSS
-       custom properties (--auspost-red-500/600, --neutral-*, --system-*
+    /* Real design tokens, pulled from a live retail site's own CSS custom
+       properties (--brand-red-500/600, --neutral-*, --system-*
        semantic colours) — not an approximation. Light theme, matching the
        predominantly white/light layout of the real site. */
-    --red:#DC1928;      /* --auspost-red-500 */
-    --red-dim:#B01420;  /* --auspost-red-600 */
+    --red:#DC1928;      /* --brand-red-500 */
+    --red-dim:#B01420;  /* --brand-red-600 */
     --ink:#0D0D10;      /* --ink-900, used here as primary text colour */
     --paper:#F5F5F5;    /* --neutral-100, page background */
     --panel:#FFFFFF;    /* --neutral-0, card/panel background */
@@ -135,7 +135,7 @@
 
   <div class="topbar">
     <div class="brand"><div class="mark">P</div>Fleet Intelligence Console</div>
-    <div class="status"><span class="dot" id="topbar-dot"></span> <span id="topbar-status-text">Connecting to fleet-mcp-server…</span></div>
+    <div class="status"><span class="dot" id="topbar-dot"></span> <span id="topbar-status-text">Connecting to fleet-context-engine…</span></div>
     <div class="clock" id="clock">--:--:--</div>
   </div>
 
@@ -241,7 +241,7 @@
       <p class="sub">Consumes <b>maintenance.alerts</b> + <b>ai.maintenance.recommendations</b>. Built for the fleet maintenance scheduler.</p>
       <div class="grid">
         <div class="card"><div class="lbl">Vehicles at risk</div><div class="val" id="maint-risk">0</div><div class="delta warn">threshold: risk &gt; 70</div></div>
-        <div class="card"><div class="lbl">Open work orders</div><div class="val" id="maint-wo">—</div><div class="delta" style="color:var(--steel);">maintenance.alerts · fleet-mcp-server</div></div>
+        <div class="card"><div class="lbl">Open work orders</div><div class="val" id="maint-wo">—</div><div class="delta" style="color:var(--steel);">maintenance.alerts · fleet-context-engine</div></div>
         <div class="card"><div class="lbl">Avg engine temp</div><div class="val" id="maint-temp">—</div></div>
         <div class="card"><div class="lbl">Avg tyre pressure</div><div class="val" id="maint-tyre">—</div></div>
       </div>
@@ -254,7 +254,7 @@
     <!-- LIVE PIPELINE -->
     <div class="view" id="view-live">
       <h1 class="pagehead">Live Pipeline</h1>
-      <p class="sub">Raw diagnostics for the same pipeline every dashboard in this console now reads from — connection state, pipeline mode/source, and the unfiltered recommendation stream across all three domains (<b>fleet-mcp-server</b>'s HTTP API, backed by the real Confluent Cloud + Flink + Bedrock pipeline built in <code>terraform/</code>).</p>
+      <p class="sub">Raw diagnostics for the same pipeline every dashboard in this console now reads from — connection state, pipeline mode/source, and the unfiltered recommendation stream across all three domains (<b>fleet-context-engine</b>'s HTTP API, backed by the real Confluent Cloud + Flink + Bedrock pipeline built in <code>terraform/</code>).</p>
 
       <div id="live-status" class="feedcard" style="height:auto;flex-direction:row;align-items:center;gap:10px;margin-bottom:14px;">
         <span class="dot" id="live-dot" style="background:var(--steel);animation:none;"></span>
@@ -279,10 +279,10 @@
 
 <script>
 /* ---------- setup ---------- */
-// Everything below reads from fleet-mcp-server's real HTTP API - no
+// Everything below reads from fleet-context-engine's real HTTP API - no
 // client-side simulation left. In LIVE mode that API is backed by a real
 // Kafka consumer over Confluent Cloud (context-engine.js); with no
-// Confluent Cloud env vars set, fleet-mcp-server falls back to its own
+// Confluent Cloud env vars set, fleet-context-engine falls back to its own
 // SIMULATED in-memory engine so the console still has something to show
 // (clearly labeled via summary.source below), but the browser itself never
 // fabricates a number.
@@ -316,7 +316,7 @@ function setLiveStatus(connected, detail){
   liveConnected = connected;
   const fallbackDetail = connected
     ? ('Connected — ' + LIVE_API)
-    : 'Not connected. Run: cd fleet-mcp-server && npm start (see SETUP.md)';
+    : 'Not connected. Run: cd fleet-context-engine && npm start (see SETUP.md)';
   const msg = detail || fallbackDetail;
   [
     [document.getElementById('topbar-dot'), document.getElementById('topbar-status-text')],
@@ -541,7 +541,7 @@ async function poll(){
       liveFetch('/api/recommendations?domain=delivery&limit=12'),
       liveFetch('/api/recommendations?domain=maintenance&limit=12'),
     ]);
-    setLiveStatus(true, (summary.source==='live-confluent-cloud' ? 'LIVE — real Confluent Cloud + Flink + Bedrock' : 'Connected — fleet-mcp-server SIMULATED fallback (no Confluent Cloud env vars set)') + (summary.consumerCaughtUp===false ? ' · consumer still catching up…' : ''));
+    setLiveStatus(true, (summary.source==='live-confluent-cloud' ? 'LIVE — real Confluent Cloud + Flink + Bedrock' : 'Connected — fleet-context-engine SIMULATED fallback (no Confluent Cloud env vars set)') + (summary.consumerCaughtUp===false ? ' · consumer still catching up…' : ''));
 
     renderOverview(summary, vehicles, weatherList, trafficIncidents, recsAll);
     renderSafety(summary, vehicles, recsSafety);
@@ -557,7 +557,7 @@ setInterval(poll, 3000);
 
 /* ---------- demo controls ---------- */
 document.getElementById('liveInjectBtn').addEventListener('click', async ()=>{
-  if (!liveConnected){ alert('Not connected to fleet-mcp-server — see SETUP.md to enable LIVE mode.'); return; }
+  if (!liveConnected){ alert('Not connected to fleet-context-engine — see SETUP.md to enable LIVE mode.'); return; }
   try {
     const result = await liveFetch('/api/inject-incident', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
     alert('Injected real engine spike on ' + result.id + '. ' + (result.note||''));
@@ -566,7 +566,7 @@ document.getElementById('liveInjectBtn').addEventListener('click', async ()=>{
   }
 });
 document.getElementById('liveTrafficBtn').addEventListener('click', async ()=>{
-  if (!liveConnected){ alert('Not connected to fleet-mcp-server — see SETUP.md to enable LIVE mode.'); return; }
+  if (!liveConnected){ alert('Not connected to fleet-context-engine — see SETUP.md to enable LIVE mode.'); return; }
   try {
     const result = await liveFetch('/api/inject-traffic-incident', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
     alert('Injected real traffic incident in ' + result.geozone + '. ' + (result.note||''));
@@ -575,7 +575,7 @@ document.getElementById('liveTrafficBtn').addEventListener('click', async ()=>{
   }
 });
 document.getElementById('liveResetBtn').addEventListener('click', async ()=>{
-  if (!liveConnected){ alert('Not connected to fleet-mcp-server — see SETUP.md to enable LIVE mode.'); return; }
+  if (!liveConnected){ alert('Not connected to fleet-context-engine — see SETUP.md to enable LIVE mode.'); return; }
   const ok = confirm(
     'This PERMANENTLY deletes all real data in the 10 Confluent Cloud topics — ' +
     'every seeded telemetry record and every real Bedrock recommendation generated so far. ' +

@@ -2,7 +2,7 @@
 
 This connects GitHub Copilot Chat directly to Confluent Cloud's fully-managed
 RTCE MCP server, so Copilot can query the real Kafka topics from this
-project's pipeline — no code from `fleet-mcp-server/` involved.
+project's pipeline — no code from `fleet-context-engine/` involved.
 
 ```
 GitHub Copilot → RTCE MCP Server → Live Kafka data (this project's cluster)
@@ -11,12 +11,11 @@ GitHub Copilot → RTCE MCP Server → Live Kafka data (this project's cluster)
 RTCE only serves live business data to Copilot; it does not manage Flink or
 Kafka resources — that's `terraform/` and the Confluent CLI/Console.
 
-**RTCE vs. `fleet-context-engine`:** RTCE exposes generic, raw topic-query
-tools (`list_topics`, `get_metadata`, `query_data`) — no fleet-specific
-reasoning (`get_fleet_summary`, `list_high_risk_vehicles`) and no
-demo-injection tools. Use it for ad-hoc "show me the raw data" questions
-alongside the fleet-specific server; see `SETUP.md` for that one and for the
-Claude Desktop/Code equivalent of these same RTCE steps.
+RTCE exposes generic, raw topic-query tools (`list_topics`, `get_metadata`,
+`query_data`) — it's the only MCP path into this project's data.
+`fleet-context-engine` has no MCP server of its own; it only serves the
+HTML dashboard over HTTP. See `SETUP.md` for the Claude Desktop/Code
+equivalent of these same RTCE steps.
 
 ## Prerequisites
 

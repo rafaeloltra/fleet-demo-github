@@ -85,7 +85,7 @@ class LiveContextEngine {
 
     const brokerHost = process.env.KAFKA_BOOTSTRAP_ENDPOINT.replace(/^SASL_SSL:\/\//, '');
     this.kafka = new Kafka({
-      clientId: 'fleet-mcp-server',
+      clientId: 'fleet-context-engine',
       brokers: [brokerHost],
       ssl: true,
       sasl: { mechanism: 'plain', username: process.env.KAFKA_API_KEY, password: process.env.KAFKA_API_SECRET },
@@ -99,7 +99,7 @@ class LiveContextEngine {
   }
 
   async _startConsumer() {
-    const consumer = this.kafka.consumer({ groupId: `fleet-mcp-server-${Date.now()}` });
+    const consumer = this.kafka.consumer({ groupId: `fleet-context-engine-${Date.now()}` });
     await consumer.connect();
     await consumer.subscribe({
       topics: [

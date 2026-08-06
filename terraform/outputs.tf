@@ -9,7 +9,7 @@ output "kafka_rest_endpoint" {
 
 # Native Kafka protocol bootstrap server (port 9092) - distinct from
 # kafka_rest_endpoint above (port 443, Kafka REST Proxy v3, HTTP). Consumed
-# by fleet-mcp-server's kafkajs-based background consumer, which needs the
+# by fleet-context-engine's kafkajs-based background consumer, which needs the
 # real Kafka wire protocol to continuously tail topics rather than
 # re-querying Flink per request.
 output "kafka_bootstrap_endpoint" {
@@ -34,7 +34,7 @@ output "app_manager_kafka_api_secret" {
   sensitive = true
 }
 
-# Read-only identity for fleet-mcp-server's background consumer - already
+# Read-only identity for fleet-context-engine's background consumer - already
 # has DeveloperRead on all topics + groups (topics.tf), matching its
 # original stated purpose ("Read-only identity for Sumo Logic dashboards /
 # downstream consumers") exactly.
@@ -58,10 +58,11 @@ output "app_manager_schema_registry_api_secret" {
   sensitive = true
 }
 
-# Consumed by fleet-mcp-server (context-engine.js) to query the real
+# Consumed by fleet-context-engine (context-engine.js) to query the real
 # Flink pipeline (SQL pull queries) and to produce real demo-injection
-# records (inject_demo_incident / inject_demo_traffic_incident), instead
-# of the in-memory simulator.
+# records (the HTTP API's /api/inject-incident and
+# /api/inject-traffic-incident endpoints), instead of the in-memory
+# simulator.
 
 output "flink_rest_endpoint" {
   value = data.confluent_flink_region.fleet.rest_endpoint

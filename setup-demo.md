@@ -2,7 +2,7 @@
 
 For when the Confluent Cloud backend (environment, cluster, 10 topics, Flink pipeline, Bedrock
 connection) is **already deployed** — this is not the `terraform apply` guide, that's
-`fleet-mcp-server/SETUP.md`. This is the short path for a colleague who just wants to open the
+`fleet-context-engine/SETUP.md`. This is the short path for a colleague who just wants to open the
 console and see the real pipeline, without touching Terraform, AWS, or the Confluent Cloud
 console at all.
 
@@ -35,14 +35,14 @@ demo-injection buttons.
 ## What they need on their own machine
 
 1. **Node.js 18+** and `npm`.
-2. **This folder**, or at minimum: `fleet-mcp-server/` (all `.js` files + `package.json`, not
+2. **This folder**, or at minimum: `fleet-context-engine/` (all `.js` files + `package.json`, not
    `node_modules` — they'll run `npm install`), `fleet-intelligence-console.html`, and `fonts/`
    (the console's self-hosted webfont). They don't need `terraform/`, `seed-data/`, or the deck.
 
 ## Steps
 
 ```bash
-cd fleet-mcp-server
+cd fleet-context-engine
 npm install
 
 export KAFKA_BOOTSTRAP_ENDPOINT="..."
@@ -64,7 +64,7 @@ Check stderr for:
 [fleet-context-engine] HTTP API listening on http://localhost:8787
 ```
 If it instead says `mode: SIMULATED`, one of the eight env vars above is missing or misspelled —
-`fleet-mcp-server` silently falls back rather than failing loudly (see `SETUP.md` for why).
+`fleet-context-engine` silently falls back rather than failing loudly (see `SETUP.md` for why).
 
 Leave that running, then in another terminal/window:
 
@@ -91,21 +91,23 @@ text says "consumer still catching up…" until then).
 
 ## Troubleshooting
 
-- **Top bar stuck on "Not connected"** — `fleet-mcp-server` isn't running, or it's running on a
+- **Top bar stuck on "Not connected"** — `fleet-context-engine` isn't running, or it's running on a
   different port. Check `curl http://localhost:8787/api/health`.
 - **Port 8787 already in use** — something else is already running (maybe a stale
-  `fleet-mcp-server` from an earlier session): `lsof -ti:8787 -sTCP:LISTEN | xargs kill`, then
+  `fleet-context-engine` from an earlier session): `lsof -ti:8787 -sTCP:LISTEN | xargs kill`, then
   `npm start` again.
 - **Numbers look sparse / mostly zero** — the topics may be freshly deployed with little history
-  yet. `telemetry-simulator.js` keeps producing continuously once `fleet-mcp-server` is running
+  yet. `telemetry-simulator.js` keeps producing continuously once `fleet-context-engine` is running
   (see the table in the main `README.md`), so it fills in within a few minutes; the one-shot
   Python seed script in `seed-data/` (needs its own Confluent Cloud + Schema Registry env vars,
   see that script's docstring) can backfill a realistic 485-record batch instantly if you want a
   fuller dashboard right away — but only the person with Schema Registry write access needs to
   run that, not every demo machine.
 
-## Optional: connecting Claude Desktop/Code to it
+## Optional: connecting an MCP client to it
 
-Not required to see the console, but if they also want to ask Claude questions about the fleet
-conversationally, that's `fleet-mcp-server/SETUP.md` sections 2-3 — same env vars as above, plus
-pointing Claude Desktop/Code's MCP config at `fleet-mcp-server/index.js`.
+Not required to see the console. `fleet-context-engine` has no MCP server of its own — RTCE
+(Confluent Cloud's native managed MCP server) is the only MCP path into this project's data, for
+**Option 1: Claude Code/Desktop** or **Option 2: VS Code Copilot**. See
+`fleet-context-engine/SETUP.md` section 3 (or `SETUP-RTCE-COPILOT.md` for Copilot) — that path
+needs its own Confluent API key, independent of the env vars above.

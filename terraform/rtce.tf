@@ -1,6 +1,6 @@
 # Turns on Confluent Cloud's Real-Time Context Engine (RTCE) for every
 # topic in the fan-out pipeline, so MCP clients (see
-# fleet-mcp-server/SETUP-RTCE-COPILOT.md) can query them directly without
+# fleet-context-engine/SETUP-RTCE-COPILOT.md) can query them directly without
 # the `confluent rtce rtce-topic create` CLI step. Requires provider
 # >= 2.73.0 (see versions.tf) and RTCE availability in cluster_region.
 locals {
