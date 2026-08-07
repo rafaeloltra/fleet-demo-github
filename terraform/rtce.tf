@@ -33,4 +33,23 @@ resource "confluent_rtce_topic" "fleet" {
   kafka_cluster {
     id = confluent_kafka_cluster.fleet.id
   }
+
+  # topic_name/description above are plain strings, not attributes of the
+  # confluent_flink_statement resources below - Terraform's dependency graph
+  # has no implicit edge to them, so without this explicit depends_on, RTCE
+  # enablement could run concurrently with (or before) Flink actually
+  # creates each topic + registers its schema via CREATE TABLE, which is
+  # exactly the scenario RTCE needs to already be done.
+  depends_on = [
+    confluent_flink_statement.create_vehicle_telemetry,
+    confluent_flink_statement.create_weather_conditions,
+    confluent_flink_statement.create_traffic_incidents,
+    confluent_flink_statement.create_parcel_volume,
+    confluent_flink_statement.create_maintenance_alerts,
+    confluent_flink_statement.create_driver_risk_events,
+    confluent_flink_statement.create_delivery_performance_events,
+    confluent_flink_statement.create_ai_maintenance_recommendations,
+    confluent_flink_statement.create_ai_safety_recommendations,
+    confluent_flink_statement.create_ai_delivery_recommendations,
+  ]
 }

@@ -28,3 +28,6 @@ seed-data/__pycache__/
 
 # Ad-hoc Confluent Cloud console export, not part of the checked-in project
 Download messages as CSV_2026-07-31T00_13_42.917Z.csv
+
+# Editable diagram source, not part of the checked-in project
+docs/architecture-diagram.drawio

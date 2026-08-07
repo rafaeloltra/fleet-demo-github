@@ -15,6 +15,10 @@ Claude Code/Desktop** or **Option 2: GitHub Copilot**, no code from this repo in
 
 ![Architecture diagram](docs/architecture-diagram.png)
 
+Editable source for this diagram: [`docs/architecture-diagram.drawio`](docs/architecture-diagram.drawio) —
+open it directly at [app.diagrams.net](https://app.diagrams.net) (File → Open From → Device), or
+import it into Lucidchart (File → Import → draw.io CSV/XML).
+
 ## Final dashboard
 
 `fleet-intelligence-console.html` in **LIVE** mode — 12 vehicles on a real Melbourne metro map,
