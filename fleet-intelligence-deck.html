@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Fleet Intelligence, in Real Time — Confluent × Bedrock</title>
+<title>Fleet Intelligence, in Real Time — Confluent × OpenAI</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
   :root{
@@ -270,7 +270,7 @@
   <!-- 1. TITLE -->
   <section class="slide" id="s0">
     <div class="brandmark">P</div>
-    <div class="eyebrow">Confluent Cloud · Apache Flink · Amazon Bedrock</div>
+    <div class="eyebrow">Confluent Cloud · Apache Flink · OpenAI</div>
     <h1 class="big">Fleet Intelligence,<br>in Real Time</h1>
     <p class="lede">From raw vehicle telemetry to an AI-generated recommendation — before the truck is back at depot.</p>
     <div class="kicker">Fleet Telemetry Demo</div>
@@ -320,7 +320,7 @@
         <li><div class="bar" style="background:var(--tel);"></div><div><b>Managed Kafka</b><span class="sub">The durable event log every downstream system reads from — no producer coupled to any one consumer.</span></div></li>
         <li><div class="bar" style="background:var(--maint);"></div><div><b>Schema Registry</b><span class="sub">Every topic's shape is enforced and versioned, so producers and consumers evolve independently without breaking each other.</span></div></li>
         <li><div class="bar" style="background:var(--delivery);"></div><div><b>Flink SQL</b><span class="sub">Stream processing written as SQL — not a bespoke consumer application per team, per language.</span></div></li>
-        <li><div class="bar" style="background:var(--ai);"></div><div><b>Native AI Model calls</b><span class="sub">Bedrock invoked directly from a Flink SQL statement — no separate inference service to build, deploy, or scale.</span></div></li>
+        <li><div class="bar" style="background:var(--ai);"></div><div><b>Native AI Model calls</b><span class="sub">OpenAI invoked directly from a Flink SQL statement — no separate inference service to build, deploy, or scale.</span></div></li>
       </ul>
       <div class="callout">Confluent isn't just where the data lands — it's where the business logic <span class="mark">and</span> the AI inference actually run.</div>
     </div>
@@ -334,7 +334,7 @@
       Raw vehicle telemetry — plus weather, traffic, and parcel-volume context — feeds a continuous
       Flink SQL pipeline that derives three independent business events: <b style="color:var(--safety)">safety</b>,
       <b style="color:var(--delivery)">delivery</b>, and <b style="color:var(--maint)">maintenance</b>. Each event is
-      handed to a Bedrock-backed model for a genuinely generated recommendation, published back to
+      handed to an OpenAI model for a genuinely generated recommendation, published back to
       Kafka as its own topic — readable by a dashboard, a downstream system, or an MCP client
       (Claude Code/Desktop, VS Code Copilot), identically.
     </p>
@@ -364,10 +364,10 @@
       </div>
       <div class="parrow">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 12h14M13 6l6 6-6 6"/></svg>
-        <div class="alabel">Flink + Bedrock<br>ML_PREDICT</div>
+        <div class="alabel">Flink + OpenAI<br>ML_PREDICT</div>
       </div>
       <div class="pcol">
-        <div class="pcol-head" style="color:var(--ai);">AI · Bedrock-generated</div>
+        <div class="pcol-head" style="color:var(--ai);">AI · OpenAI-generated</div>
         <div class="chip" style="--dot:var(--ai);">ai.maintenance.recommendations</div>
         <div class="chip" style="--dot:var(--ai);">ai.safety.recommendations</div>
         <div class="chip" style="--dot:var(--ai);">ai.delivery.recommendations</div>
@@ -376,7 +376,7 @@
     <div class="pipeline-foot">
       <div><b>10</b> topics</div>
       <div><b>6</b> continuous Flink SQL jobs</div>
-      <div><b>1</b> shared Bedrock model</div>
+      <div><b>1</b> shared OpenAI model</div>
       <div>Model: <b>Claude Haiku 4.5</b> via cross-region inference profile</div>
     </div>
   </section>
@@ -388,9 +388,9 @@
     <ol class="steps">
       <li><div class="step-body"><b>Open the Fleet Intelligence Console</b><span>12 simulated vehicles on a real Melbourne metro map, three business dashboards, live business-impact KPIs — running instantly, zero setup.</span></div></li>
       <li><div class="step-body"><b>Inject an engine spike</b><span>Watch Safety, Delivery, and Maintenance react independently, on screen, in real time — including today's impacted-deliveries and at-risk-revenue counters.</span></div></li>
-      <li><div class="step-body"><b>Switch to the Live Pipeline tab</b><span>Same console, now reading real data through the actual Confluent + Flink + Bedrock backend.</span></div></li>
+      <li><div class="step-body"><b>Switch to the Live Pipeline tab</b><span>Same console, now reading real data through the actual Confluent + Flink + OpenAI backend.</span></div></li>
       <li><div class="step-body"><b>Ask your MCP client (Option 1: Claude Code/Desktop, Option 2: VS Code Copilot) to show the latest vehicle.telemetry records</b><span>Same real topic the dashboard reads — connected via Confluent's native Real-Time Context Engine (RTCE), the only MCP path into this project's data.</span></div></li>
-      <li><div class="step-body"><b>Trigger a real incident, from the console</b><span>A genuine Bedrock-generated recommendation lands end to end — usually in under a minute.</span></div></li>
+      <li><div class="step-body"><b>Trigger a real incident, from the console</b><span>A genuine OpenAI-generated recommendation lands end to end — usually in under a minute.</span></div></li>
     </ol>
   </section>
 
@@ -417,7 +417,7 @@
           <div class="trow"><div class="t">t+0</div><div class="d"><b>Script starts</b> — wire-encoding each record to match its topic's registered schema.</div></div>
           <div class="trow"><div class="t">~2 min</div><div class="d"><b>485 records land</b> across the 4 raw/context topics.</div></div>
           <div class="trow"><div class="t">~2.5 min</div><div class="d"><b>Flink derives</b> real maintenance, safety, and delivery events.</div></div>
-          <div class="trow"><div class="t">~3 min</div><div class="d"><b>Bedrock recommendations</b> appear in the three <code style="font-family:var(--mono);">ai.*</code> topics.</div></div>
+          <div class="trow"><div class="t">~3 min</div><div class="d"><b>OpenAI recommendations</b> appear in the three <code style="font-family:var(--mono);">ai.*</code> topics.</div></div>
         </div>
       </div>
     </div>
@@ -430,7 +430,7 @@
     <div class="recap">
       <div class="row"><div class="k">Problem</div><div class="v">Fleet insight <b>lagged reality</b> — reports, not reactions.</div></div>
       <div class="row"><div class="k">Confluent</div><div class="v">One stream, <b>three decoupled</b> business views, computed in SQL.</div></div>
-      <div class="row"><div class="k">Bedrock</div><div class="v">A genuinely <b>generated</b> recommendation — not a canned template.</div></div>
+      <div class="row"><div class="k">OpenAI</div><div class="v">A genuinely <b>generated</b> recommendation — not a canned template.</div></div>
       <div class="row"><div class="k">Result</div><div class="v">Raw signal to AI action in <b>under a minute</b>.</div></div>
     </div>
     <div class="kicker" style="margin-top:36px;">Full source + step-by-step redeploy guide → README.md</div>

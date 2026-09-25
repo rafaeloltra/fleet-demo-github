@@ -1,6 +1,6 @@
 // context-engine.js
 //
-// Reads the REAL fleet state from Confluent Cloud + Flink + Bedrock (the
+// Reads the REAL fleet state from Confluent Cloud + Flink + OpenAI (the
 // pipeline in terraform/), instead of simulating it in memory.
 //
 // A background Kafka consumer (kafkajs) tails all 10 real topics from the
@@ -64,11 +64,73 @@ function decodeValue(buffer) {
   return JSON.parse(buffer.subarray(5).toString('utf8'));
 }
 
+// How close in time (via receivedAt) a heuristic overspeed event and an AI
+// anomaly for the same vehicle need to be to count as corroborating each
+// other. vehicle.telemetry ticks every 3s, so this covers several ticks
+// either side (allowing for the two Flink jobs' independent processing
+// latency) without being so loose that almost any recent anomaly for a busy
+// vehicle counts - a wide window (e.g. minutes) made "confirmed" trivially
+// true for most overspeed events, which isn't a meaningful comparison.
+const RISK_MATCH_WINDOW_MS = 20 * 1000;
+
 function severityToRisk(severity) {
   if (severity === 'high') return 90;
   if (severity === 'medium') return 65;
   if (severity === 'low') return 30;
   return 0;
+}
+
+// ---------------------------------------------------------------------------
+// "Behind the Scenes" pipeline visualization (fleet-intelligence-console.html
+// Behind the Scenes tab). Each hop below is a (node, edge) pair in that tab's
+// diagram - a topic arrival fires every hop in its list, in order, so the
+// animation can show the real journey: raw telemetry -> Kafka -> Flink
+// business rules -> Flink+OpenAI -> the served in-memory model -> its three
+// real consumers (this console, RTCE agents, and Tableflow -> Snowflake).
+// Business-topic arrivals only render the first hop (Kafka -> Flink) since
+// their onward journey to serve/app isn't separately observable until the AI
+// recommendation for them arrives - Tableflow materializes both business and
+// AI topics directly, but only the AI-topic path is animated all the way
+// through, to keep the diagram legible.
+const AI_HOPS = [
+  { node: 'flinkAi', edge: 'flinkBusiness-flinkAi' },
+  { node: 'serve', edge: 'flinkAi-serve' },
+  { node: 'app', edge: 'serve-app' },
+  { node: 'tableflow', edge: 'serve-tableflow' },
+  { node: 'snowflake', edge: 'tableflow-snowflake' },
+];
+const TOPIC_PULSE_HOPS = {
+  'vehicle.telemetry': [{ node: 'kafka', edge: 'source-kafka' }],
+  'weather.conditions': [{ node: 'kafka', edge: 'source-kafka' }],
+  'traffic.incidents': [{ node: 'kafka', edge: 'source-kafka' }],
+  'parcel.volume': [{ node: 'kafka', edge: 'source-kafka' }],
+  'maintenance.alerts': [{ node: 'flinkBusiness', edge: 'kafka-flinkBusiness' }],
+  'driver.risk.events': [{ node: 'flinkBusiness', edge: 'kafka-flinkBusiness' }],
+  'driver.risk.events.anomaly': [{ node: 'flinkBusiness', edge: 'kafka-flinkBusiness' }],
+  'delivery.performance.events': [{ node: 'flinkBusiness', edge: 'kafka-flinkBusiness' }],
+  'ai.maintenance.recommendations': AI_HOPS,
+  'ai.safety.recommendations': AI_HOPS,
+  'ai.delivery.recommendations': AI_HOPS,
+};
+
+function summarizePulseDetail(topic, r) {
+  switch (topic) {
+    case 'vehicle.telemetry': return `${r.object_id} · ${r.geozone_ids?.[0] || ''}`;
+    case 'weather.conditions': return `${r.geozone} · ${r.condition}`;
+    case 'traffic.incidents': return `${r.geozone} · ${r.type}`;
+    case 'parcel.volume': return `${r.vehicle_id} · ${r.parcels_onboard} onboard`;
+    case 'maintenance.alerts': return `${r.vehicle_id} · ${r.severity}`;
+    case 'driver.risk.events': return `${r.vehicle_id} · ${r.risk_level}`;
+    case 'driver.risk.events.anomaly': return `${r.vehicle_id} · ${r.speed_kmh}km/h vs forecast ${r.forecast_speed_kmh}`;
+    case 'delivery.performance.events': return `${r.vehicle_id} · ${r.performance_status}`;
+    case 'ai.maintenance.recommendations':
+    case 'ai.safety.recommendations':
+    case 'ai.delivery.recommendations': {
+      const text = r.recommendation || '';
+      return `${r.vehicle_id} · "${text.slice(0, 50)}${text.length > 50 ? '…' : ''}"`;
+    }
+    default: return '';
+  }
 }
 
 class LiveContextEngine {
@@ -79,9 +141,16 @@ class LiveContextEngine {
     this.parcelVolumeLog = [];
     this.recommendations = [];
     this.driverRiskEvents = [];
+    this.driverRiskAnomalyEvents = [];
     this.deliveryPerformanceEvents = [];
+    this.maintenanceAlerts = [];
     this._recentMsgTimestamps = [];
     this.ready = false;
+
+    // Behind the Scenes tab state - see TOPIC_PULSE_HOPS above.
+    this.pipelineEvents = [];
+    this._pipelineSeq = 0;
+    this.pipelineStats = { kafka: 0, flinkBusiness: 0, flinkAi: 0, serve: 0, app: 0, agent: 0, tableflow: 0, snowflake: 0 };
 
     const brokerHost = process.env.KAFKA_BOOTSTRAP_ENDPOINT.replace(/^SASL_SSL:\/\//, '');
     this.kafka = new Kafka({
@@ -99,19 +168,49 @@ class LiveContextEngine {
   }
 
   async _startConsumer() {
+    const admin = this.kafka.admin();
+    await admin.connect();
+
+    const topics = [
+      'vehicle.telemetry', 'weather.conditions', 'traffic.incidents', 'parcel.volume',
+      'maintenance.alerts', 'driver.risk.events', 'delivery.performance.events',
+      'ai.maintenance.recommendations', 'ai.safety.recommendations', 'ai.delivery.recommendations',
+    ];
+    // driver.risk.events.anomaly (the AI_DETECT_ANOMALIES experiment) only
+    // exists on the terraform-us-west-2* stacks, not the original
+    // ap-southeast-2 stack - subscribing to a topic the target cluster
+    // doesn't have would break this consumer for every other topic too, so
+    // only add it once confirmed present.
+    const existingTopics = await admin.listTopics();
+    if (existingTopics.includes('driver.risk.events.anomaly')) {
+      topics.push('driver.risk.events.anomaly');
+    }
+
     const consumer = this.kafka.consumer({ groupId: `fleet-context-engine-${Date.now()}` });
     await consumer.connect();
-    await consumer.subscribe({
-      topics: [
-        'vehicle.telemetry', 'weather.conditions', 'traffic.incidents', 'parcel.volume',
-        'maintenance.alerts', 'driver.risk.events', 'delivery.performance.events',
-        'ai.maintenance.recommendations', 'ai.safety.recommendations', 'ai.delivery.recommendations',
-      ],
-      fromBeginning: true,
+    await consumer.subscribe({ topics, fromBeginning: true });
+
+    // Behind the Scenes tab: this consumer always replays every topic from
+    // offset 0 on every process start (fresh random groupId above, so every
+    // Cloud Run cold start/redeploy re-reads full history) - great for
+    // instantly rebuilding the in-memory model the other tabs read, but
+    // without this, that same full-history replay would also fire a
+    // pipeline-event pulse per historical message, making the Behind the
+    // Scenes animation look like a firehose right after every restart
+    // instead of real-time pace. Snapshotting each topic-partition's
+    // high-water-mark offset before consuming starts - same technique
+    // river-svof-demo's bridge server uses for its compacted topics - lets
+    // _recordPipelinePulse (below) tell "existed before this process
+    // started" apart from "genuinely arrived just now", without touching
+    // _applyRecord's own instant full-history rebuild.
+    const pulseCatchupTarget = new Map(); // `${topic}:${partition}` -> offset
+    (await Promise.all(topics.map((topic) => admin.fetchTopicOffsets(topic)))).forEach((offsets, i) => {
+      offsets.forEach(({ partition, offset }) => pulseCatchupTarget.set(`${topics[i]}:${partition}`, Number(offset)));
     });
+    await admin.disconnect();
 
     await consumer.run({
-      eachMessage: async ({ topic, message }) => {
+      eachMessage: async ({ topic, partition, message }) => {
         if (!message.value) return;
         let record;
         try {
@@ -125,6 +224,9 @@ class LiveContextEngine {
         this._recentMsgTimestamps.push(now);
         this._recentMsgTimestamps = this._recentMsgTimestamps.filter((t) => now - t < 10000);
         this._applyRecord(topic, record);
+
+        const target = pulseCatchupTarget.get(`${topic}:${partition}`) ?? 0;
+        if (Number(message.offset) >= target) this._recordPipelinePulse(topic, record);
       },
     });
 
@@ -151,6 +253,7 @@ class LiveContextEngine {
           geozone,
           lat: r.position?.latitude ?? existing?.lat,
           lng: r.position?.longitude ?? existing?.lng,
+          direction: r.position?.direction ?? existing?.direction,
           ignitionStatus: r.ignition_status,
           tripType: r.trip_type,
           speed: r.position?.speed,
@@ -186,6 +289,20 @@ class LiveContextEngine {
       case 'maintenance.alerts': {
         const v = this.vehicles.get(r.vehicle_id);
         if (v) v.maintRisk = severityToRisk(r.severity);
+        // receivedAt (wall-clock consumption time), not r.event_time, is what
+        // the trace-strip UI correlates against an injection's timestamp -
+        // event_time is the Flink-derived business event's own clock, not
+        // when this process actually saw it.
+        this.maintenanceAlerts.unshift({
+          vehicleId: r.vehicle_id,
+          geozone: r.geozone,
+          engineTempC: r.engine_temp_c,
+          severity: r.severity,
+          message: r.message,
+          eventTime: r.event_time,
+          receivedAt: Date.now(),
+        });
+        this.maintenanceAlerts = this.maintenanceAlerts.slice(0, 200);
         break;
       }
       case 'driver.risk.events': {
@@ -206,6 +323,27 @@ class LiveContextEngine {
           receivedAt: Date.now(),
         });
         this.driverRiskEvents = this.driverRiskEvents.slice(0, 200);
+        break;
+      }
+      // The AI_DETECT_ANOMALIES experiment (derive_driver_risk_events_anomaly
+      // in terraform-us-west-2*/flink_statements.tf) - deliberately kept
+      // separate from the 'driver.risk.events' case above rather than
+      // merging into the same vehicle.driverRisk/overspeed fields, so the
+      // existing Safety tab keeps showing today's heuristic unchanged and
+      // this feed can be shown alongside it for a side-by-side comparison.
+      case 'driver.risk.events.anomaly': {
+        this.driverRiskAnomalyEvents.unshift({
+          vehicleId: r.vehicle_id,
+          geozone: r.geozone,
+          speedKmh: r.speed_kmh,
+          forecastSpeedKmh: r.forecast_speed_kmh,
+          lowerBound: r.lower_bound,
+          upperBound: r.upper_bound,
+          riskLevel: r.risk_level,
+          eventTime: r.event_time,
+          receivedAt: Date.now(),
+        });
+        this.driverRiskAnomalyEvents = this.driverRiskAnomalyEvents.slice(0, 200);
         break;
       }
       case 'delivery.performance.events': {
@@ -243,6 +381,39 @@ class LiveContextEngine {
   _pushRecommendation(domain, vehicleId, text, severity) {
     this.recommendations.unshift({ domain, vehicleId, text, severity, timestamp: new Date().toISOString() });
     this.recommendations = this.recommendations.slice(0, 200);
+  }
+
+  _pushPulseHop(node, edge, detail) {
+    this.pipelineEvents.push({ id: ++this._pipelineSeq, node, edge, detail, ts: Date.now() });
+    this.pipelineEvents = this.pipelineEvents.slice(-500);
+    if (this.pipelineStats[node] != null) this.pipelineStats[node] += 1;
+  }
+
+  _recordPipelinePulse(topic, record) {
+    const hops = TOPIC_PULSE_HOPS[topic];
+    if (!hops) return;
+    const detail = summarizePulseDetail(topic, record);
+    hops.forEach((hop) => this._pushPulseHop(hop.node, hop.edge, detail));
+  }
+
+  // Real, on-demand signal for the Behind the Scenes tab's "Agent" node -
+  // fired whenever a real MCP client (this console's own chat widget, or an
+  // external Claude/Copilot session) asks RTCE a question via /api/ask. Unlike
+  // the continuous Kafka-driven hops above, this is a genuine on-demand pull,
+  // not a streaming consumer, so it only pulses when actually queried.
+  recordAgentQuery(question) {
+    const text = (question || '').slice(0, 60);
+    this._pushPulseHop('agent', 'serve-agent', `RTCE query · "${text}${(question || '').length > 60 ? '…' : ''}"`);
+  }
+
+  async getPipelineEvents(sinceId = 0) {
+    const events = this.pipelineEvents.filter((e) => e.id > sinceId).slice(-200);
+    return {
+      events,
+      stats: this.pipelineStats,
+      latestId: this.pipelineEvents.length ? this.pipelineEvents[this.pipelineEvents.length - 1].id : sinceId,
+      live: true,
+    };
   }
 
   // --- public interface matching the original simulator's shape --------
@@ -338,9 +509,89 @@ class LiveContextEngine {
     return filtered.slice(0, limit);
   }
 
+  // Used by the console's trace-strip UI to detect the moment Flink's
+  // derive_maintenance_alerts statement has actually processed an injected
+  // vehicle.telemetry record - receivedAt lets the client tell "this alert
+  // is newer than my injection" apart from a pre-existing one.
+  async getMaintenanceAlerts(vehicleId, limit = 10) {
+    const filtered = vehicleId ? this.maintenanceAlerts.filter((a) => a.vehicleId === vehicleId) : this.maintenanceAlerts;
+    return filtered.slice(0, limit);
+  }
+
+  // Whether AI_DETECT_ANOMALIES corroborates a single heuristic event -
+  // exposed per-event (via getDriverRiskEvents below) rather than only as an
+  // aggregate, so the verdict on any one card is independently checkable
+  // instead of something the console just asserts.
+  //
+  // Matched on receivedAt (this process's own Date.now() at consumption
+  // time, for BOTH feeds), not the business event_time - the two jobs
+  // format event_time differently (driver.risk.events passes vehicle.
+  // telemetry's ISO `datetime` through untouched; driver.risk.events.anomaly
+  // is Flink's CAST(TIMESTAMP AS STRING), which renders in the Flink
+  // session's local time zone rather than UTC) so comparing those strings
+  // directly was silently comparing timestamps hours apart. receivedAt is
+  // the same clock, same process, for both feeds, so it has no such
+  // zone-formatting hazard, and it's still a reasonable proxy for "arrived
+  // at roughly the same moment" since both jobs read the same
+  // near-real-time vehicle.telemetry stream.
+  //
+  // Only the OVERSPEED half of the heuristic is compared at all - the other
+  // half (harsh_braking_score > 0.7) flags on a signal this AI job was never
+  // given (AI_DETECT_ANOMALIES here only watches speed_kmh), so there is no
+  // fair verdict to render for those; they're labeled 'not-evaluated'
+  // instead of being silently counted as either confirmed or noise.
+  _riskVerdict(e, anomalyEvents, matchWindowMs) {
+    if (e.overspeedStatus !== 'OVERSPEED') return 'not-evaluated';
+    const corroborated = anomalyEvents.some((a) => a.vehicleId === e.vehicleId && Math.abs(a.receivedAt - e.receivedAt) < matchWindowMs);
+    return corroborated ? 'confirmed' : 'normal-for-vehicle';
+  }
+
+  // Raw driver.risk.events feed (today's fixed-threshold heuristic),
+  // enriched with aiVerdict (see _riskVerdict) - and its AI_DETECT_ANOMALIES
+  // counterpart - exposed side by side for the Safety tab's before/after
+  // comparison panel.
+  async getDriverRiskEvents(vehicleId, limit = 10) {
+    const filtered = vehicleId ? this.driverRiskEvents.filter((e) => e.vehicleId === vehicleId) : this.driverRiskEvents;
+    return filtered.slice(0, limit).map((e) => ({ ...e, aiVerdict: this._riskVerdict(e, this.driverRiskAnomalyEvents, RISK_MATCH_WINDOW_MS) }));
+  }
+
+  async getDriverRiskAnomalyEvents(vehicleId, limit = 10) {
+    const filtered = vehicleId ? this.driverRiskAnomalyEvents.filter((e) => e.vehicleId === vehicleId) : this.driverRiskAnomalyEvents;
+    return filtered.slice(0, limit);
+  }
+
+  // Aggregate version of the same per-event verdict above, for the Safety
+  // tab's KPI tiles. Every count here is directly reproducible from what
+  // getDriverRiskEvents/getDriverRiskAnomalyEvents themselves return -
+  // there's no aggregate-only signal being asserted without the underlying
+  // per-event evidence also being visible in the feeds.
+  async getRiskComparison(windowMs = 15 * 60 * 1000) {
+    const now = Date.now();
+    const heuristic = this.driverRiskEvents.filter((e) => now - e.receivedAt < windowMs);
+    const anomaly = this.driverRiskAnomalyEvents.filter((e) => now - e.receivedAt < windowMs);
+
+    const overspeedHeuristic = heuristic.filter((e) => e.overspeedStatus === 'OVERSPEED');
+    const overspeedConfirmed = overspeedHeuristic.filter((e) => this._riskVerdict(e, anomaly, RISK_MATCH_WINDOW_MS) === 'confirmed').length;
+
+    // Mirrors the speed > 95 km/h half of derive_driver_risk_events' own
+    // threshold, applied to the same speed_kmh column the anomaly feed
+    // carries - "would the heuristic also flag this instant" on the one
+    // signal both jobs actually share.
+    const anomalyCaughtByHeuristic = anomaly.filter((e) => e.speedKmh > 95).length;
+
+    return {
+      windowMinutes: Math.round(windowMs / 60000),
+      brakingOnlyHeuristicCount: heuristic.length - overspeedHeuristic.length,
+      overspeedHeuristicCount: overspeedHeuristic.length,
+      overspeedNoiseCount: overspeedHeuristic.length - overspeedConfirmed,
+      anomalyCount: anomaly.length,
+      anomalyMissedByHeuristicCount: anomaly.length - anomalyCaughtByHeuristic,
+    };
+  }
+
   // Demo control: produces a REAL wire-encoded record to vehicle.telemetry
   // with a spiked engine temperature, so the real Flink pipeline derives a
-  // real maintenance alert and the real Bedrock model generates a real
+  // real maintenance alert and the real OpenAI model generates a real
   // recommendation - the live-data equivalent of the "Inject engine spike"
   // button in the HTML console. Reflects back into this process's own
   // in-memory state once its own consumer reads the message back.
@@ -374,7 +625,7 @@ class LiveContextEngine {
       geozone_ids: [geozone],
     };
     await produceRecord('vehicle.telemetry', record);
-    return { id, geozone, injected: 'engine_spike', note: 'Real record produced to vehicle.telemetry - the real Flink pipeline will derive a maintenance alert and Bedrock recommendation within its normal processing latency (usually well under a minute).' };
+    return { id, geozone, injected: 'engine_spike', note: 'Real record produced to vehicle.telemetry - the real Flink pipeline will derive a maintenance alert and OpenAI recommendation within its normal processing latency (usually well under a minute).' };
   }
 
   // Demo control: produces a REAL high-severity traffic incident record.
@@ -390,12 +641,55 @@ class LiveContextEngine {
     return { ...record, note: 'Real record produced to traffic.incidents.' };
   }
 
+  // Demo control: produces a REAL vehicle.telemetry record with speed far
+  // outside the simulator's normal 0-110 km/h range, so the real
+  // AI_DETECT_ANOMALIES pipeline (driver.risk.events.anomaly) flags a
+  // genuine anomaly within its normal processing + checkpoint latency,
+  // instead of waiting for the random walk to happen to drift there -
+  // useful for recording a demo without an open-ended wait. The heuristic
+  // (driver.risk.events) will also fire on this via its own OVERSPEED
+  // threshold, so it shows up in both feeds - a real side-by-side moment,
+  // not a fabricated one.
+  async injectSpeedAnomaly(vehicleId) {
+    const ids = [...this.vehicles.keys()];
+    const id = vehicleId ?? ids[Math.floor(Math.random() * ids.length)];
+    const base = this.vehicles.get(id);
+    const geozone = base?.geozone ?? GEOZONES[Math.floor(Math.random() * GEOZONES.length)];
+    const spikeSpeed = 150;
+    const record = {
+      object_id: id,
+      datetime: new Date().toISOString().replace(/\.\d+Z$/, '.000Z'),
+      ignition_status: 'ON',
+      trip_type: 'BUSINESS',
+      position: { altitude: 50, longitude: 144.9, latitude: -37.8, direction: 180, satellites_count: 10, speed: spikeSpeed },
+      inputs: {
+        other: { country_code_geonames: 2077456, virtual_gps_odometer: 100000 },
+        calculated_inputs: { fuel_consumption: 0.5, fuel_level: 50, mileage: 100000, rpm: 4200, temperature: 90, weight: 2000 },
+        device_inputs: {
+          priority: 'HIGH', movement: 'MOVING', hdop: '0.5',
+          power_supply_voltage: 13, battery_voltage: 12, gps_speed: spikeSpeed, gsm_signal_strength: 0.8, operator: 0.5,
+          engine_rpm: 4200, canbus_engine_coolant_temperature: 90, fuel_level_can: 50, speed_wheel: spikeSpeed,
+          overspeeding_events: 'OVERSPEED', ecodrive_braking_events: 0.2, ecodrive_harsh_acceleration: 0.9, ecodrive_idling_time: 0,
+          lcv_driver_doors: 'CLOSE', lcv_left_back_doors: 'CLOSE', lcv_right_back_doors: 'CLOSE',
+        },
+        tires: [1, 2, 3, 4].map((n) => ({
+          tire_id: `tire0${n}`, tire_pressure: 95, tire_temperature: 30,
+          tire_air_leakage_rate: 0, tire_pressure_threshold_detection: 0, tire_status: 0,
+          tire_sensor_electrical_fault: 0, tire_sensor_enable_status: 1, tire_location: n, tire_extended_tire_pressure_support: 1,
+        })),
+      },
+      geozone_ids: [geozone],
+    };
+    await produceRecord('vehicle.telemetry', record);
+    return { id, geozone, speedKmh: spikeSpeed, injected: 'speed_anomaly', note: 'Real record produced to vehicle.telemetry with speed far outside baseline. The heuristic will flag it immediately (OVERSPEED); AI_DETECT_ANOMALIES needs a checkpoint to commit before it shows up in driver.risk.events.anomaly, usually well under a minute but can occasionally take longer.' };
+  }
+
   // Demo control: HARD reset. Purges all 10 real topics (see
   // confluent-client.js's purgeAllTopics for how - retention-based, not
   // drop/recreate, so the topics' schemas and the 6 persistent Flink jobs
   // are untouched) and clears this process's own in-memory view. This is
   // destructive and irreversible - the real seeded data and every
-  // real Bedrock recommendation generated so far are actually deleted.
+  // real OpenAI recommendation generated so far are actually deleted.
   async resetPipeline() {
     const result = await purgeAllTopics();
     this.vehicles.clear();
@@ -404,9 +698,10 @@ class LiveContextEngine {
     this.parcelVolumeLog = [];
     this.recommendations = [];
     this.driverRiskEvents = [];
+    this.driverRiskAnomalyEvents = [];
     this.deliveryPerformanceEvents = [];
     this._recentMsgTimestamps = [];
-    return { ...result, note: 'Real topics purged and in-memory state cleared. The 6 Flink jobs and Bedrock connection were not touched - new data will flow through normally.' };
+    return { ...result, note: 'Real topics purged and in-memory state cleared. The 6 Flink jobs and OpenAI connection were not touched - new data will flow through normally.' };
   }
 }
 
@@ -415,6 +710,12 @@ class LiveContextEngine {
 // out of the box without any setup. ---
 
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+// Compass bearing (0=N, 90=E) from a lat/lng step vector - same formula as
+// telemetry-simulator.js's LIVE-mode equivalent, so the console's
+// directional vehicle-arrow icon works identically in both modes.
+function bearingFromDelta(dLat, dLng) {
+  return (Math.atan2(dLng, dLat) * 180 / Math.PI + 360) % 360;
+}
 
 function makeVehicle(i) {
   const geozone = pick(GEOZONES);
@@ -429,6 +730,7 @@ function makeVehicle(i) {
     lng: homeLng + (Math.random() - 0.5) * 0.02,
     dLat: (Math.random() - 0.5) * 0.0016,
     dLng: (Math.random() - 0.5) * 0.0016,
+    direction: Math.round(Math.random() * 360),
     speed: 30 + Math.random() * 50,
     engineTemp: 78 + Math.random() * 12,
     fuel: 40 + Math.random() * 50,
@@ -465,7 +767,12 @@ class SimulatedContextEngine {
     this.parcelVolumeLog = [];
     this.recommendations = [];
     this.driverRiskEvents = [];
+    // No simulated equivalent of driver.risk.events.anomaly - AI_DETECT_
+    // ANOMALIES only runs against the real Confluent Cloud Flink pipeline.
+    // Left permanently empty rather than fabricated, per getDriverRiskAnomalyEvents below.
+    this.driverRiskAnomalyEvents = [];
     this.deliveryPerformanceEvents = [];
+    this.maintenanceAlerts = [];
     this._recentMsgTimestamps = [];
     this._interval = setInterval(() => this.tick(), 1000);
   }
@@ -503,6 +810,7 @@ class SimulatedContextEngine {
       v.lat += v.dLat; v.lng += v.dLng;
       if (Math.abs(v.lat - v.homeLat) > 0.015) v.dLat *= -1;
       if (Math.abs(v.lng - v.homeLng) > 0.015) v.dLng *= -1;
+      v.direction = Math.round(bearingFromDelta(v.dLat, v.dLng));
 
       v.speed = Math.max(0, v.speed + (Math.random() - 0.5) * 8 - (activeIncidentHere ? 4 : 0));
       if (!v.spiked) v.engineTemp = Math.max(70, Math.min(99, v.engineTemp + (Math.random() - 0.5) * 2));
@@ -655,6 +963,39 @@ class SimulatedContextEngine {
     return filtered.slice(0, limit);
   }
 
+  async getMaintenanceAlerts(vehicleId, limit = 10) {
+    const filtered = vehicleId ? this.maintenanceAlerts.filter((a) => a.vehicleId === vehicleId) : this.maintenanceAlerts;
+    return filtered.slice(0, limit);
+  }
+
+  // aiVerdict always null - no simulated anomaly feed to compare against
+  // (see getDriverRiskAnomalyEvents below), so there's no verdict to render.
+  async getDriverRiskEvents(vehicleId, limit = 10) {
+    const filtered = vehicleId ? this.driverRiskEvents.filter((e) => e.vehicleId === vehicleId) : this.driverRiskEvents;
+    return filtered.slice(0, limit).map((e) => ({ ...e, aiVerdict: null }));
+  }
+
+  // Always empty - see this.driverRiskAnomalyEvents in the constructor.
+  async getDriverRiskAnomalyEvents() {
+    return [];
+  }
+
+  // No simulated anomaly feed to compare against - see getRiskComparison on
+  // LiveContextEngine for the real comparison this mirrors the shape of.
+  async getRiskComparison(windowMs = 15 * 60 * 1000) {
+    const now = Date.now();
+    const recent = this.driverRiskEvents.filter((e) => now - e.receivedAt < windowMs);
+    const overspeedHeuristicCount = recent.filter((e) => e.overspeedStatus === 'OVERSPEED').length;
+    return {
+      windowMinutes: Math.round(windowMs / 60000),
+      brakingOnlyHeuristicCount: recent.length - overspeedHeuristicCount,
+      overspeedHeuristicCount,
+      overspeedNoiseCount: 0,
+      anomalyCount: 0,
+      anomalyMissedByHeuristicCount: 0,
+    };
+  }
+
   async injectIncident(vehicleId) {
     const v = vehicleId ? this.vehicles.get(vehicleId) : [...this.vehicles.values()][Math.floor(Math.random() * this.vehicles.size)];
     if (!v) return null;
@@ -662,6 +1003,12 @@ class SimulatedContextEngine {
     v.engineTemp = 104;
     v.maintRisk = 92;
     v.driverRisk = Math.max(v.driverRisk, 72);
+    this.maintenanceAlerts.unshift({
+      vehicleId: v.id, geozone: v.geozone, engineTempC: v.engineTemp, severity: 'high',
+      message: `Vehicle ${v.id} engine temperature ${v.engineTemp}C near ${v.geozone}`,
+      eventTime: new Date().toISOString(), receivedAt: Date.now(),
+    });
+    this.maintenanceAlerts = this.maintenanceAlerts.slice(0, 200);
     this.pushRecommendation('maintenance', v.id, `Vehicle ${v.id} shows signs of cooling-system degradation near ${v.geozone}. Inspect the vehicle within 48 hours.`, 'high');
     this.pushRecommendation('safety', v.id, `Elevated engine heat on ${v.id} correlated with harsh-braking pattern - recommend a driver check-in.`, 'medium');
     this.pushRecommendation('delivery', v.id, `${v.id} flagged for depot diversion in ${v.geozone} - reassigning remaining stops to nearest available vehicle.`, 'high');
@@ -675,6 +1022,30 @@ class SimulatedContextEngine {
     this.trafficIncidents.unshift(incident);
     this.trafficIncidents = this.trafficIncidents.slice(0, 50);
     return incident;
+  }
+
+  // No real AI_DETECT_ANOMALIES to trigger in SIMULATED mode - just bumps
+  // the vehicle's own (already-simulated) speed and driverRisk fields, same
+  // as the rest of tick()'s heuristic, rather than fabricating an anomaly
+  // verdict this mode has no real pipeline to back up.
+  async injectSpeedAnomaly(vehicleId) {
+    const v = vehicleId ? this.vehicles.get(vehicleId) : [...this.vehicles.values()][Math.floor(Math.random() * this.vehicles.size)];
+    if (!v) return null;
+    v.speed = 150;
+    v.overspeed = true;
+    v.driverRisk = Math.max(v.driverRisk, 80);
+    return { id: v.id, geozone: v.geozone, speedKmh: v.speed, injected: 'speed_anomaly', note: 'SIMULATED mode - no real AI_DETECT_ANOMALIES feed to confirm this against.' };
+  }
+
+  // The Behind the Scenes tab's diagram is only meaningful against the real
+  // Confluent Cloud pipeline (real topic arrivals, real Tableflow sync) - in
+  // SIMULATED mode there's nothing genuine to animate, so this reports
+  // "not live" instead of fabricating pulses, matching this file's own rule
+  // that the browser never gets to see a made-up number.
+  recordAgentQuery() {}
+
+  async getPipelineEvents() {
+    return { events: [], stats: null, latestId: 0, live: false };
   }
 }
 

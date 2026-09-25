@@ -1,9 +1,0 @@
-# Copy this file to terraform.tfvars and fill in real values.
-# terraform.tfvars is gitignored and will NOT be committed.
-# Never paste real secrets into chat — edit this file directly in your editor/terminal.
-
-confluent_cloud_api_key    = "REPLACE_ME"
-confluent_cloud_api_secret = "REPLACE_ME"
-
-bedrock_aws_access_key_id     = "REPLACE_ME"
-bedrock_aws_secret_access_key = "REPLACE_ME"

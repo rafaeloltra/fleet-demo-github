@@ -21,6 +21,19 @@ __pycache__/
 # Claude Code local/machine-specific settings
 .claude/settings.local.json
 
+# RTCE Global-scoped API key/secret for the MCP-as-REST proxy (never commit)
+.rtce-credentials
+fleet-context-engine/.rtce-credentials
+
+# Local secrets (Confluent Cloud/RTCE/OpenAI credentials) - never commit;
+# fleet-context-engine/.env.example is the tracked template
+.env
+.env.*
+!.env.example
+
+# Same secrets, staged for `gcloud run services update --env-vars-file`
+.cloudrun-env.yaml
+
 # Generated demo data (regenerate via seed-data/generate_seed_data.py)
 out/
 seed-data/out/

@@ -1,9 +1,9 @@
 # Running this demo on someone else's machine
 
-For when the Confluent Cloud backend (environment, cluster, 10 topics, Flink pipeline, Bedrock
+For when the Confluent Cloud backend (environment, cluster, 10 topics, Flink pipeline, OpenAI
 connection) is **already deployed** — this is not the `terraform apply` guide, that's
 `fleet-context-engine/SETUP.md`. This is the short path for a colleague who just wants to open the
-console and see the real pipeline, without touching Terraform, AWS, or the Confluent Cloud
+console and see the real pipeline, without touching Terraform or the Confluent Cloud
 console at all.
 
 ## What they need from you (the person who ran `terraform apply`)
@@ -27,8 +27,8 @@ reasoning as `terraform.tfvars.example`'s own warning: anything pasted in plaint
 be treated as compromised and rotated).
 
 **They do NOT need:** the org-level `confluent_cloud_api_key`/`confluent_cloud_api_secret` (that's
-only for running Terraform itself), the `bedrock_aws_*` keys (Bedrock is called from Flink,
-running inside Confluent Cloud — their laptop never talks to AWS), Terraform, or Python. The
+only for running Terraform itself), the `openai_api_key` (OpenAI is called from Flink,
+running inside Confluent Cloud — their laptop never talks to OpenAI), Terraform, or Python. The
 `app_manager` key above already has enough scope (`CloudClusterAdmin`) to read topics and run the
 demo-injection buttons.
 
@@ -59,7 +59,7 @@ npm start
 
 Check stderr for:
 ```
-[fleet-context-engine] mode: LIVE (real Confluent Cloud + Flink + Bedrock)
+[fleet-context-engine] mode: LIVE (real Confluent Cloud + Flink + OpenAI)
 [fleet-telemetry-simulator] started - producing continuous real telemetry/weather/traffic/parcel data
 [fleet-context-engine] HTTP API listening on http://localhost:8787
 ```
@@ -85,7 +85,7 @@ text says "consumer still catching up…" until then).
 - **Live Pipeline** — raw diagnostics: connection state, pipeline mode/source, unfiltered
   recommendation feed across all three domains. Useful if something looks off.
 - **Demo controls** (left sidebar) — "Inject REAL engine spike" / "Inject REAL traffic incident"
-  produce a real record to the real topic and let the real Flink + Bedrock pipeline react
+  produce a real record to the real topic and let the real Flink + OpenAI pipeline react
   (usually under a minute). "Reset real pipeline" is destructive — it purges all 10 topics — so
   don't click it mid-demo unless you mean to.
 

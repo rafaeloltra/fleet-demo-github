@@ -9,7 +9,7 @@
 //
 // Produces REAL wire-encoded records via confluent-client.js's
 // produceRecord() - same mechanism the HTTP API's /api/inject-incident
-// endpoint uses - so every number downstream (Flink-derived events, Bedrock
+// endpoint uses - so every number downstream (Flink-derived events, OpenAI
 // recommendations) is genuinely computed from these, not faked in this
 // process's memory.
 //
@@ -31,6 +31,12 @@ const GEOZONES = Object.keys(GEOZONE_COORDS);
 
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+// Compass bearing (0=N, 90=E) from a lat/lng step vector - used so the
+// console's directional vehicle-arrow icon points the way a vehicle is
+// actually moving, not a random heading unrelated to its real position deltas.
+function bearingFromDelta(dLat, dLng) {
+  return (Math.atan2(dLng, dLat) * 180 / Math.PI + 360) % 360;
+}
 
 function makeVehicleState(i) {
   const geozone = GEOZONES[i % GEOZONES.length];
@@ -41,8 +47,8 @@ function makeVehicleState(i) {
     homeLat, homeLng,
     lat: homeLat + (Math.random() - 0.5) * 0.02,
     lng: homeLng + (Math.random() - 0.5) * 0.02,
-    dLat: (Math.random() - 0.5) * 0.0016,
-    dLng: (Math.random() - 0.5) * 0.0016,
+    dLat: (Math.random() - 0.5) * 0.003,
+    dLng: (Math.random() - 0.5) * 0.003,
     speed: 30 + Math.random() * 50,
     engineTemp: 78 + Math.random() * 12,
     fuel: 40 + Math.random() * 50,
@@ -54,8 +60,8 @@ function makeVehicleState(i) {
 function step(v) {
   v.lat += v.dLat;
   v.lng += v.dLng;
-  if (Math.abs(v.lat - v.homeLat) > 0.015) v.dLat *= -1;
-  if (Math.abs(v.lng - v.homeLng) > 0.015) v.dLng *= -1;
+  if (Math.abs(v.lat - v.homeLat) > 0.02) v.dLat *= -1;
+  if (Math.abs(v.lng - v.homeLng) > 0.02) v.dLng *= -1;
   v.speed = clamp(v.speed + (Math.random() - 0.5) * 10, 0, 110);
   v.engineTemp = clamp(v.engineTemp + (Math.random() - 0.5) * 2.5, 70, 108);
   v.fuel = clamp(v.fuel - Math.random() * 0.3, 5, 100);
@@ -73,7 +79,7 @@ function telemetryRecord(v) {
       altitude: Math.round(20 + Math.random() * 80),
       longitude: Number(v.lng.toFixed(6)),
       latitude: Number(v.lat.toFixed(6)),
-      direction: Math.round(Math.random() * 360),
+      direction: Math.round(bearingFromDelta(v.dLat, v.dLng)),
       satellites_count: 6 + Math.floor(Math.random() * 8),
       speed: Number(v.speed.toFixed(1)),
     },
@@ -133,16 +139,20 @@ export function startTelemetrySimulator() {
 
   const vehicles = Array.from({ length: 12 }, (_, i) => makeVehicleState(i));
 
+  // Moves every vehicle each tick (concurrently, not sequentially awaited -
+  // 12 sequential produce calls could take longer than the 3s interval
+  // itself and cause ticks to stack up). Previously only 1-2 of the 12
+  // vehicles moved per tick, so any given marker sat frozen on the map for
+  // ~25s on average between updates - moving all of them every tick is what
+  // actually makes movement visible, not a bigger step size.
   setInterval(async () => {
-    try {
-      const n = 1 + (Math.random() < 0.4 ? 1 : 0);
-      for (let i = 0; i < n; i++) {
-        const v = pick(vehicles);
-        step(v);
-        await produceRecord('vehicle.telemetry', telemetryRecord(v));
-      }
-    } catch (err) {
-      console.error('[fleet-telemetry-simulator] vehicle.telemetry produce failed:', err.message);
+    const results = await Promise.allSettled(vehicles.map((v) => {
+      step(v);
+      return produceRecord('vehicle.telemetry', telemetryRecord(v));
+    }));
+    const failed = results.filter((r) => r.status === 'rejected');
+    if (failed.length) {
+      console.error(`[fleet-telemetry-simulator] vehicle.telemetry produce failed for ${failed.length}/${results.length} vehicles:`, failed[0].reason?.message);
     }
   }, 3000);
 
@@ -163,7 +173,12 @@ export function startTelemetrySimulator() {
 
   setInterval(async () => {
     try {
-      if (Math.random() >= 0.04) return;
+      // 1% chance per 3s tick - averages one new incident every ~5 minutes.
+      // Was 4% (~75s average): with only 6 geozones and 12 vehicles, that
+      // rate kept most of the fleet sitting in a "recently incident-hit"
+      // zone at any given moment, which read as implausibly saturated on
+      // the Network Conditions table and the impacted-deliveries KPI.
+      if (Math.random() >= 0.01) return;
       const geozone = pick(GEOZONES);
       await produceRecord('traffic.incidents', {
         geozone,

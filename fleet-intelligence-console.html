@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <title>Fleet Intelligence Console</title>
+<!-- Matches the header's brand mark (red square, white "P") instead of leaving the tab on a generic default icon. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%23DC1928'/%3E%3Ctext x='12' y='17' font-family='Arial, sans-serif' font-size='14' font-weight='700' fill='white' text-anchor='middle'%3EP%3C/text%3E%3C/svg%3E">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -56,6 +58,8 @@
   .status{display:flex;align-items:center;gap:8px;font-family:var(--font-mono);font-size:11px;color:var(--steel);}
   .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(29,150,79,.6);animation:pulse 1.6s infinite;}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(29,150,79,.55);}70%{box-shadow:0 0 0 8px rgba(29,150,79,0);}100%{box-shadow:0 0 0 0 rgba(29,150,79,0);}}
+  .trace-dot-active{background:var(--purple);box-shadow:0 0 0 0 rgba(125,95,222,.55);animation:tracePulse 1.3s infinite;}
+  @keyframes tracePulse{0%{box-shadow:0 0 0 0 rgba(125,95,222,.55);}70%{box-shadow:0 0 0 7px rgba(125,95,222,0);}100%{box-shadow:0 0 0 0 rgba(125,95,222,0);}}
   .clock{font-family:var(--font-mono);font-size:12px;color:var(--steel);}
 
   /* Sidebar */
@@ -104,6 +108,7 @@
   .leaflet-control-attribution{background:rgba(255,255,255,.8)!important;color:var(--steel)!important;font-size:9px!important;}
   .leaflet-control-attribution a{color:var(--steel)!important;}
   .leaflet-control-zoom a{background:var(--panel-light)!important;color:var(--ink)!important;border-color:var(--line)!important;}
+  .vehicle-marker-icon{background:transparent!important;border:none!important;}
 
   /* Feed */
   .feedcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;height:340px;display:flex;flex-direction:column;}
@@ -128,6 +133,35 @@
   .pill.low{background:rgba(29,150,79,.15);color:var(--green);}
   .pill.mid{background:rgba(237,165,31,.15);color:var(--amber);}
   .pill.high{background:rgba(220,25,40,.12);color:var(--red-dim);}
+
+  /* Behind the Scenes: real-time pipeline diagram */
+  .bts-wrap{display:grid;grid-template-columns:230px 1fr;gap:14px;height:calc(100vh - 220px);min-height:520px;}
+  .bts-sidebar{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 14px;overflow-y:auto;display:flex;flex-direction:column;gap:20px;}
+  .bts-sidebar h3{margin:0 0 8px;font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--steel);font-weight:600;}
+  .bts-legend-row{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink);padding:3px 0;}
+  .bts-swatch{width:9px;height:9px;border-radius:2px;flex-shrink:0;}
+  .bts-stat-row{display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--line);color:var(--steel);}
+  .bts-stat-row span.v{color:var(--ink);font-family:var(--font-mono);font-weight:600;}
+  .bts-main{display:flex;flex-direction:column;gap:12px;min-height:0;}
+  .bts-canvas-wrap{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;flex-shrink:0;}
+  .bts-canvas{position:relative;width:100%;aspect-ratio:1200/300;}
+  .bts-edges{position:absolute;inset:0;width:100%;height:100%;}
+  .bts-spark{offset-rotate:0deg;animation:bts-travel 750ms linear forwards;}
+  @keyframes bts-travel{from{offset-distance:0%;opacity:1;}to{offset-distance:100%;opacity:.35;}}
+  .bts-gov-band{fill:color-mix(in srgb, var(--green) 6%, transparent);stroke:var(--green);stroke-width:1.3;stroke-dasharray:6 5;animation:bts-breathe 4s ease-in-out infinite;}
+  @keyframes bts-breathe{0%,100%{stroke-opacity:.4;}50%{stroke-opacity:.8;}}
+  .bts-gov-label{fill:var(--green);font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:.04em;}
+  .bts-nodes{position:absolute;inset:0;}
+  .bts-node{position:absolute;display:flex;flex-direction:column;justify-content:center;gap:4px;padding:9px 11px;background:var(--panel);border:1px solid var(--node-color);border-radius:8px;transition:box-shadow .15s ease-out, transform .15s ease-out;opacity:.8;}
+  .bts-node.static{opacity:.6;}
+  .bts-node.active{opacity:1;transform:scale(1.035);box-shadow:0 0 16px color-mix(in srgb, var(--node-color) 55%, transparent);}
+  .bts-node .lbl{font-size:12px;font-weight:700;color:var(--node-color);}
+  .bts-node .sub{font-size:9.5px;color:var(--steel);line-height:1.35;white-space:pre-line;}
+  .bts-eventlog{background:var(--panel);border:1px solid var(--line);border-radius:10px;flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
+  .bts-eventlog-header{padding:8px 14px;font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--steel);border-bottom:1px solid var(--line);flex-shrink:0;}
+  .bts-eventlog-body{overflow-y:auto;padding:2px 0;font-family:var(--font-mono);font-size:11px;flex:1;}
+  .bts-eventlog-row{display:grid;grid-template-columns:120px 1fr;gap:10px;padding:3px 14px;border-left:3px solid transparent;color:var(--steel);}
+  .bts-eventlog-row .node-tag{color:var(--ink);font-weight:600;}
 </style>
 </head>
 <body>
@@ -146,11 +180,13 @@
     <div class="navitem" data-view="delivery"><span class="sw" style="background:var(--green)"></span>Delivery Ops<span class="count" id="count-delivery">0</span></div>
     <div class="navitem" data-view="maintenance"><span class="sw" style="background:var(--amber)"></span>Maintenance<span class="count" id="count-maintenance">0</span></div>
     <div class="navitem" data-view="live"><span class="sw" style="background:var(--purple)"></span>Live Pipeline<span class="count" id="count-live">0</span></div>
+    <div class="navitem" data-view="behindscenes"><span class="sw" style="background:var(--green)"></span>Behind the Scenes</div>
     <div class="navlabel" style="margin-top:14px;">Demo controls</div>
     <div style="padding:6px 10px;">
-      <button class="act" id="liveInjectBtn" style="width:100%;margin-bottom:8px;background:var(--purple);">⚡ Inject REAL engine spike</button>
-      <button class="act" id="liveTrafficBtn" style="width:100%;margin-bottom:8px;background:var(--purple);">🚧 Inject REAL traffic incident</button>
-      <button class="ghost" id="liveResetBtn" style="width:100%;border-color:var(--red);color:var(--red-dim);">🗑 Reset real pipeline</button>
+      <button class="act" id="liveInjectBtn" style="width:100%;margin-bottom:8px;background:var(--purple);"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-2px;margin-right:4px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Inject REAL engine spike</button>
+      <button class="act" id="liveTrafficBtn" style="width:100%;margin-bottom:8px;background:var(--purple);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>Inject REAL traffic incident</button>
+      <button class="act" id="liveSpeedAnomalyBtn" style="width:100%;margin-bottom:8px;background:var(--purple);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/></svg>Inject REAL speed anomaly</button>
+      <button class="ghost" id="liveResetBtn" style="width:100%;border-color:var(--red);color:var(--red-dim);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>Reset real pipeline</button>
     </div>
   </div>
 
@@ -166,22 +202,34 @@
         <div class="ticker" id="ticker"></div>
       </div>
 
+      <!-- Trace strip: shows one injected event's real journey through the
+           pipeline (raw -> Flink-derived -> AI reasoning -> live) instead of
+           just waiting silently for a new AI Advisor line to appear. Hidden
+           until an injection starts one. -->
+      <div id="traceStrip" style="display:none;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <div style="font-family:var(--font-mono);font-size:10.5px;color:var(--steel);">TRACING <span id="traceVehicle" style="color:var(--ink);font-weight:600;"></span></div>
+          <button id="traceCloseBtn" style="background:none;border:none;color:var(--steel);cursor:pointer;display:flex;align-items:center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
+        <div id="traceSteps" style="display:flex;align-items:center;gap:6px;"></div>
+      </div>
+
       <div class="grid grid-overview">
         <div class="card"><div class="lbl">Vehicles online</div><div class="val" id="kpi-vehicles">—</div><div class="delta up" id="kpi-vehicles-delta">connecting…</div></div>
         <div class="card"><div class="lbl">Events / sec</div><div class="val" id="kpi-eps">—</div><div class="delta">measured, all topics</div></div>
         <div class="card"><div class="lbl">Open AI recommendations</div><div class="val" id="kpi-recs">0</div><div class="delta warn" id="kpi-recs-delta">—</div></div>
         <div class="card"><div class="lbl">Avg parcels delivered/hr</div><div class="val" id="kpi-eta">—</div><div class="delta">fleet-wide, delivery.performance.events</div></div>
-        <div class="card"><div class="lbl">Today's impacted deliveries</div><div class="val" id="kpi-impacted-deliveries">0</div><div class="delta warn" id="kpi-impacted-deliveries-delta">parcels at risk</div></div>
-        <div class="card"><div class="lbl">Today's impacted revenue</div><div class="val" id="kpi-impacted-revenue">$0</div><div class="delta warn">est. @ $14.50/parcel</div></div>
+        <div class="card"><div class="lbl">Recent impacted deliveries</div><div class="val" id="kpi-impacted-deliveries">0</div><div class="delta warn" id="kpi-impacted-deliveries-delta">parcels at risk, recent incidents</div></div>
+        <div class="card"><div class="lbl">Recent impacted revenue</div><div class="val" id="kpi-impacted-revenue">$0</div><div class="delta warn">est. @ $14.50/parcel</div></div>
       </div>
 
       <div class="cols">
         <div class="mapcard">
-          <h3>Fleet position — Melbourne metro</h3>
+          <h3 style="display:flex;justify-content:space-between;align-items:center;">Fleet position — Melbourne metro <span id="fresh-map" style="font-size:10px;color:var(--steel);font-weight:400;"></span></h3>
           <div id="map"></div>
         </div>
         <div class="feedcard">
-          <h3>AI Advisor output <span style="font-size:10px;color:var(--steel);font-weight:400;">AWS Bedrock</span></h3>
+          <h3>AI Advisor output <span style="font-size:10px;color:var(--steel);font-weight:400;">OpenAI · <span id="fresh-advisor"></span></span></h3>
           <div class="feed" id="feed-overview"></div>
         </div>
       </div>
@@ -192,6 +240,27 @@
           <thead><tr><th>Geozone</th><th>Weather</th><th>Traffic</th></tr></thead>
           <tbody id="network-conditions"></tbody>
         </table>
+      </div>
+
+      <!-- Floating "Ask the live data" chat widget - RTCE real SQL, not a canned response -->
+      <button id="chatLauncher" title="Ask the live data"
+              style="position:fixed;right:24px;bottom:24px;z-index:50;width:56px;height:56px;border-radius:50%;background:var(--purple);color:#fff;border:none;box-shadow:0 4px 14px rgba(0,0,0,.25);cursor:pointer;display:flex;align-items:center;justify-content:center;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg></button>
+
+      <div id="chatPanel" style="display:none;position:fixed;right:24px;bottom:90px;z-index:50;width:380px;max-width:calc(100vw - 48px);height:480px;max-height:calc(100vh - 140px);background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.25);flex-direction:column;overflow:hidden;">
+        <div style="padding:12px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+          <div>
+            <div style="font-family:var(--font-display);font-weight:600;font-size:14px;color:var(--ink);">Ask the live data</div>
+            <div style="font-family:var(--font-mono);font-size:10px;color:var(--steel);">Powered by RTCE — real SQL, asked right now</div>
+          </div>
+          <button id="chatCloseBtn" style="background:none;border:none;color:var(--steel);cursor:pointer;display:flex;align-items:center;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
+        <div id="chatMessages" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 14px;display:flex;flex-direction:column;gap:10px;"></div>
+        <div id="chatSuggestions" style="padding:0 14px 10px;display:flex;flex-direction:column;gap:6px;flex-shrink:0;"></div>
+        <div style="padding:10px;border-top:1px solid var(--line);display:flex;gap:8px;flex-shrink:0;">
+          <input id="chatInput" type="text" placeholder="Ask about the live fleet…"
+                 style="flex:1;padding:9px 10px;border:1px solid var(--line);border-radius:7px;font-family:var(--font-body);font-size:12.5px;background:var(--panel);color:var(--ink);">
+          <button class="act" id="chatSendBtn" style="background:var(--purple);white-space:nowrap;">Send</button>
+        </div>
       </div>
     </div>
 
@@ -216,6 +285,31 @@
       <div class="feedcard" style="height:auto;margin-top:14px;">
         <h3>Safety recommendations</h3>
         <div class="feed" id="feed-safety" style="max-height:280px;"></div>
+      </div>
+
+      <h2 class="pagehead" style="font-size:16px;margin-top:22px;">Heuristic vs. AI_DETECT_ANOMALIES</h2>
+      <p class="sub">Same raw telemetry, two ways of flagging a driver-risk event: <b>driver.risk.events</b> uses a
+        fixed threshold (speed &gt; 95 km/h or a harsh-braking score &gt; 0.7) applied identically to every vehicle.
+        <b>driver.risk.events.anomaly</b> replaces the speed half of that with <code>AI_DETECT_ANOMALIES</code>,
+        which learns each vehicle's own normal speed baseline and only fires when it deviates from that baseline.
+        The comparison below only covers the <b>overspeed</b> half of the heuristic - AI_DETECT_ANOMALIES here only
+        watches speed, so harsh-braking alerts (<span id="cmp-braking-only">0</span> in this window) aren't something
+        it can confirm or refute, and every card in both feeds below shows its own verdict rather than just a total.</p>
+      <div class="grid" style="grid-template-columns:repeat(4,1fr);">
+        <div class="card"><div class="lbl">Overspeed alerts (<span id="cmp-window">15</span> min)</div><div class="val" id="cmp-heuristic">0</div><div class="delta" style="color:var(--steel);">speed &gt; 95 km/h, every vehicle</div></div>
+        <div class="card"><div class="lbl">...normal for that vehicle per AI</div><div class="val warn" id="cmp-noise">0</div><div class="delta warn">no corroborating anomaly nearby</div></div>
+        <div class="card"><div class="lbl">AI-flagged anomalies</div><div class="val" id="cmp-anomaly">0</div><div class="delta" style="color:var(--steel);">per-vehicle baseline</div></div>
+        <div class="card"><div class="lbl">...missed by fixed threshold</div><div class="val" id="cmp-missed" style="color:var(--red-dim);">0</div><div class="delta" style="color:var(--red-dim);">real deviations, never &gt; 95 km/h</div></div>
+      </div>
+      <div class="cols" style="grid-template-columns:1fr 1fr;">
+        <div class="feedcard" style="height:320px;">
+          <h3>Heuristic <span style="font-size:10px;color:var(--steel);font-weight:400;">driver.risk.events</span></h3>
+          <div class="feed" id="feed-risk-heuristic"></div>
+        </div>
+        <div class="feedcard" style="height:320px;">
+          <h3>AI_DETECT_ANOMALIES <span style="font-size:10px;color:var(--steel);font-weight:400;">driver.risk.events.anomaly</span></h3>
+          <div class="feed" id="feed-risk-anomaly"></div>
+        </div>
       </div>
     </div>
 
@@ -254,23 +348,70 @@
     <!-- LIVE PIPELINE -->
     <div class="view" id="view-live">
       <h1 class="pagehead">Live Pipeline</h1>
-      <p class="sub">Raw diagnostics for the same pipeline every dashboard in this console now reads from — connection state, pipeline mode/source, and the unfiltered recommendation stream across all three domains (<b>fleet-context-engine</b>'s HTTP API, backed by the real Confluent Cloud + Flink + Bedrock pipeline built in <code>terraform/</code>).</p>
+      <p class="sub">Raw diagnostics for the same pipeline every dashboard in this console now reads from — connection state, pipeline mode/source, and the unfiltered recommendation stream across all three domains (<b>fleet-context-engine</b>'s HTTP API, backed by the real Confluent Cloud + Flink + OpenAI pipeline built in <code>terraform/</code>).</p>
 
       <div id="live-status" class="feedcard" style="height:auto;flex-direction:row;align-items:center;gap:10px;margin-bottom:14px;">
         <span class="dot" id="live-dot" style="background:var(--steel);animation:none;"></span>
-        <span id="live-status-text" style="font-family:var(--font-mono);font-size:12px;color:var(--steel);">Connecting to http://localhost:8787 …</span>
+        <span id="live-status-text" style="font-family:var(--font-mono);font-size:12px;color:var(--steel);">Connecting…</span>
       </div>
 
       <div class="grid">
         <div class="card"><div class="lbl">Vehicles reporting</div><div class="val" id="live-vehicles">—</div><div class="delta" id="live-source">—</div></div>
         <div class="card"><div class="lbl">Avg engine temp</div><div class="val" id="live-temp">—</div></div>
         <div class="card"><div class="lbl">High risk (safety+maint)</div><div class="val" id="live-risk">—</div><div class="delta warn">threshold: risk &gt; 70</div></div>
-        <div class="card"><div class="lbl">Open AI recommendations</div><div class="val" id="live-recs">—</div><div class="delta" id="live-recs-delta">real Bedrock output</div></div>
+        <div class="card"><div class="lbl">Open AI recommendations</div><div class="val" id="live-recs">—</div><div class="delta" id="live-recs-delta">real OpenAI output</div></div>
       </div>
 
       <div class="feedcard" style="height:auto;">
-        <h3>Real recommendations <span style="font-size:10px;color:var(--steel);font-weight:400;">ai.safety / ai.delivery / ai.maintenance.recommendations</span></h3>
+        <h3>Real recommendations <span style="font-size:10px;color:var(--steel);font-weight:400;">ai.safety / ai.delivery / ai.maintenance.recommendations · <span id="fresh-livepipeline"></span></span></h3>
         <div class="feed" id="feed-live" style="max-height:360px;"></div>
+      </div>
+    </div>
+
+    <!-- BEHIND THE SCENES -->
+    <div class="view" id="view-behindscenes">
+      <h1 class="pagehead">Behind the Scenes</h1>
+      <p class="sub">Every box below is real and built — nothing here is a mock-up. Watch a real Kafka record travel from a vehicle simulator through Confluent Cloud, Flink, and OpenAI, then fan out to three independent, real consumers of the same governed data: this console, an RTCE-connected agent (Claude/Copilot), and Tableflow's Iceberg materialization into Snowflake.</p>
+
+      <div class="bts-wrap">
+        <aside class="bts-sidebar">
+          <section>
+            <h3>Node types</h3>
+            <div class="bts-legend-row"><span class="bts-swatch" style="background:var(--steel)"></span>External source</div>
+            <div class="bts-legend-row"><span class="bts-swatch" style="background:var(--blue)"></span>Kafka topic</div>
+            <div class="bts-legend-row"><span class="bts-swatch" style="background:var(--amber)"></span>Flink SQL</div>
+            <div class="bts-legend-row"><span class="bts-swatch" style="background:var(--green)"></span>Serve / Tableflow</div>
+            <div class="bts-legend-row"><span class="bts-swatch" style="background:var(--purple)"></span>Agent (RTCE)</div>
+            <div class="bts-legend-row"><span class="bts-swatch" style="background:var(--red-dim)"></span>Snowflake</div>
+          </section>
+          <section>
+            <h3>Cumulative hops</h3>
+            <div class="bts-stat-row"><span>Kafka arrivals</span><span class="v" id="bts-stat-kafka">0</span></div>
+            <div class="bts-stat-row"><span>Flink · business</span><span class="v" id="bts-stat-flinkBusiness">0</span></div>
+            <div class="bts-stat-row"><span>Flink · AI advisor</span><span class="v" id="bts-stat-flinkAi">0</span></div>
+            <div class="bts-stat-row"><span>Served to App</span><span class="v" id="bts-stat-app">0</span></div>
+            <div class="bts-stat-row"><span>Agent (RTCE) queries</span><span class="v" id="bts-stat-agent">0</span></div>
+            <div class="bts-stat-row"><span>Tableflow → Iceberg</span><span class="v" id="bts-stat-tableflow">0</span></div>
+            <div class="bts-stat-row"><span>Snowflake-queryable</span><span class="v" id="bts-stat-snowflake">0</span></div>
+          </section>
+          <section id="bts-offline-note" style="display:none;">
+            <h3>Note</h3>
+            <p style="font-size:11.5px;color:var(--steel);line-height:1.5;margin:0;">This diagram only animates against the real Confluent Cloud pipeline. Connect fleet-context-engine to LIVE mode (see SETUP.md) to see real hops here.</p>
+          </section>
+        </aside>
+
+        <div class="bts-main">
+          <div class="bts-canvas-wrap">
+            <div class="bts-canvas" id="bts-canvas">
+              <svg class="bts-edges" id="bts-edges-svg" viewBox="0 0 1200 300" preserveAspectRatio="none"></svg>
+              <div class="bts-nodes" id="bts-nodes"></div>
+            </div>
+          </div>
+          <div class="bts-eventlog">
+            <div class="bts-eventlog-header">Pipeline event log</div>
+            <div class="bts-eventlog-body" id="bts-eventlog-body"></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -286,7 +427,12 @@
 // SIMULATED in-memory engine so the console still has something to show
 // (clearly labeled via summary.source below), but the browser itself never
 // fabricates a number.
-const LIVE_API = 'http://localhost:8787';
+// When this file is served by fleet-context-engine itself (npm start, or
+// deployed on Cloud Run) the API is same-origin, so relative paths work and
+// avoid hardcoding a host. Opened directly as a local file:// (the original
+// "open fleet-intelligence-console.html" workflow), there is no origin to
+// be same-origin *with*, so fall back to the documented localhost:8787.
+const LIVE_API = window.location.protocol === 'file:' ? 'http://localhost:8787' : '';
 let liveConnected = false;
 
 async function liveFetch(path, opts){
@@ -300,6 +446,22 @@ function tickClock(){
   document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-AU', {hour12:false});
 }
 setInterval(tickClock, 1000); tickClock();
+
+/* ---------- freshness indicators (distributes "this is live" beyond the
+   single global status line, since all panels update in lockstep off the
+   same poll() cycle - see FRESHNESS_TARGETS) ---------- */
+let lastPollTime = null;
+const FRESHNESS_TARGETS = ['fresh-map', 'fresh-advisor', 'fresh-livepipeline'];
+function tickFreshness(){
+  if (lastPollTime == null) return;
+  const secs = Math.round((Date.now() - lastPollTime) / 1000);
+  const label = secs < 1 ? 'updated just now' : `updated ${secs}s ago`;
+  FRESHNESS_TARGETS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = label;
+  });
+}
+setInterval(tickFreshness, 1000);
 
 /* ---------- nav ---------- */
 document.querySelectorAll('.navitem').forEach(item=>{
@@ -315,7 +477,7 @@ document.querySelectorAll('.navitem').forEach(item=>{
 function setLiveStatus(connected, detail){
   liveConnected = connected;
   const fallbackDetail = connected
-    ? ('Connected — ' + LIVE_API)
+    ? ('Connected — ' + (LIVE_API || window.location.origin))
     : 'Not connected. Run: cd fleet-context-engine && npm start (see SETUP.md)';
   const msg = detail || fallbackDetail;
   [
@@ -339,6 +501,7 @@ function setLiveStatus(connected, detail){
    vehicle.telemetry - no client-side movement simulation. */
 const leafletMap = L.map('map', { zoomControl:true, attributionControl:true })
   .setView([-37.85, 145.0], 10);
+// Standard OpenStreetMap tiles - free, no API key required.
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   subdomains: 'abc',
@@ -346,26 +509,96 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 }).addTo(leafletMap);
 
 const truckMarkers = {};
+// Arrowhead icon rotated to the vehicle's real compass bearing (0=N, from
+// telemetry's position.direction field - see telemetry-simulator.js's
+// bearingFromDelta) so markers point the way each vehicle is actually
+// heading, instead of a plain dot with no sense of travel direction. The
+// rotator div is a separate inner element (not the icon root) so the
+// animation loop below can update just its transform directly via the DOM
+// every frame, without recreating the whole divIcon 60 times/sec.
+function vehicleIcon(direction, fillColor, spiked){
+  const size = spiked ? 20 : 16;
+  const html = `<div class="vehicle-arrow-rotator" style="width:${size}px;height:${size}px;transform:rotate(${direction||0}deg);">
+    <svg width="${size}" height="${size}" viewBox="0 0 16 16">
+      <path d="M8 0 L14 14 L8 10.5 L2 14 Z" fill="${fillColor}" stroke="#0D0D10" stroke-width="1"/>
+    </svg>
+  </div>`;
+  return L.divIcon({ html, className: 'vehicle-marker-icon', iconSize: [size, size], iconAnchor: [size/2, size/2] });
+}
+
+/* ---------- smooth marker movement between polls -----------------------
+   Telemetry only updates each vehicle roughly once per 3s poll cycle, which
+   made markers visibly snap/teleport. This tweens position (via Leaflet's
+   own cheap setLatLng, which just updates a CSS transform) and heading (via
+   directly writing the rotator div's transform, avoiding icon recreation)
+   over MOVE_ANIMATION_MS, so a vehicle glides to its new real position
+   instead of jumping there. markerAnimState tracks each marker's current
+   *displayed* lat/lng/direction (which may be mid-animation) so a new poll
+   arriving before the previous glide finishes continues smoothly from
+   wherever the marker actually is, not the old target. */
+const MOVE_ANIMATION_MS = 2700; // just under the 3s poll interval
+const markerAnimState = {}; // id -> { lat, lng, direction, rafId, fillColor, spiked }
+
+function shortestAngleDelta(from, to){
+  let delta = (to - from) % 360;
+  if (delta > 180) delta -= 360;
+  if (delta < -180) delta += 360;
+  return delta;
+}
+
+function animateMarkerTo(id, marker, toLat, toLng, toDirection){
+  const state = markerAnimState[id];
+  if (state?.rafId) cancelAnimationFrame(state.rafId);
+
+  const from = marker.getLatLng();
+  const fromLat = from.lat, fromLng = from.lng;
+  const fromDirection = state?.direction ?? toDirection;
+  const angleDelta = shortestAngleDelta(fromDirection, toDirection);
+  const startTime = performance.now();
+
+  function step(now){
+    const t = Math.min(1, (now - startTime) / MOVE_ANIMATION_MS);
+    marker.setLatLng([fromLat + (toLat - fromLat) * t, fromLng + (toLng - fromLng) * t]);
+    const direction = fromDirection + angleDelta * t;
+    const rotator = marker._icon?.querySelector('.vehicle-arrow-rotator');
+    if (rotator) rotator.style.transform = `rotate(${direction}deg)`;
+    markerAnimState[id].direction = direction;
+    markerAnimState[id].rafId = t < 1 ? requestAnimationFrame(step) : null;
+  }
+  markerAnimState[id] = { ...state, direction: fromDirection, rafId: requestAnimationFrame(step) };
+}
+
 function renderMap(vehicles){
   const seen = new Set();
   vehicles.forEach(v=>{
     if (v.lat == null || v.lng == null) return;
     seen.add(v.id);
-    let marker = truckMarkers[v.id];
-    if (!marker){
-      marker = L.circleMarker([v.lat, v.lng], {
-        radius: 5, color:'#0D0D10', weight:1, fillColor:'#3587DA', fillOpacity:1,
-      }).addTo(leafletMap);
-      marker.bindTooltip(v.id, { permanent:true, direction:'top', offset:[0,-4], className:'truck-tooltip' });
-      truckMarkers[v.id] = marker;
-    }
-    marker.setLatLng([v.lat, v.lng]);
     const spiked = (v.engineTemp||0) > 100 || (v.maintRisk||0) > 85;
     const fillColor = spiked ? '#DC1928' : ((v.driverRisk||0) > 70 ? '#EDA51F' : '#3587DA');
-    marker.setStyle({ fillColor, radius: spiked ? 7 : 5 });
+    const direction = v.direction || 0;
+    let marker = truckMarkers[v.id];
+    if (!marker){
+      marker = L.marker([v.lat, v.lng], { icon: vehicleIcon(direction, fillColor, spiked) }).addTo(leafletMap);
+      marker.bindTooltip(v.id, { permanent:true, direction:'top', offset:[0,-12], className:'truck-tooltip' });
+      truckMarkers[v.id] = marker;
+      markerAnimState[v.id] = { direction, rafId: null, fillColor, spiked };
+      return; // nothing to animate from on first sighting
+    }
+    const state = markerAnimState[v.id];
+    if (state && (state.fillColor !== fillColor || state.spiked !== spiked)){
+      marker.setIcon(vehicleIcon(state.direction ?? direction, fillColor, spiked));
+      state.fillColor = fillColor;
+      state.spiked = spiked;
+    }
+    animateMarkerTo(v.id, marker, v.lat, v.lng, direction);
   });
   Object.keys(truckMarkers).forEach(id=>{
-    if (!seen.has(id)){ leafletMap.removeLayer(truckMarkers[id]); delete truckMarkers[id]; }
+    if (!seen.has(id)){
+      if (markerAnimState[id]?.rafId) cancelAnimationFrame(markerAnimState[id].rafId);
+      delete markerAnimState[id];
+      leafletMap.removeLayer(truckMarkers[id]);
+      delete truckMarkers[id];
+    }
   });
 }
 
@@ -398,6 +631,17 @@ function renderFeed(elId, recs){
   const feed = document.getElementById(elId);
   if (!feed || !recs) return;
   feed.innerHTML = '';
+  if (!recs.length){
+    // Without this, an empty feed (e.g. right after "Reset real pipeline"
+    // purges every recommendation) was just an empty box with no
+    // indication of why - margin:auto centers a single child in a flex
+    // container regardless of the feed's column-reverse direction.
+    const empty = document.createElement('div');
+    empty.style.cssText = 'margin:auto;text-align:center;color:var(--steel);font-size:12px;padding:20px;max-width:220px;';
+    empty.textContent = 'No recommendations yet — waiting for the pipeline to produce new events.';
+    feed.appendChild(empty);
+    return;
+  }
   // feed uses column-reverse, so append in reverse chronological order (oldest of this batch first)
   [...recs].reverse().forEach(r=>{
     const div = document.createElement('div');
@@ -421,64 +665,172 @@ function renderSafetyTable(vehicles){
   });
 }
 
-/* ---------- network conditions (weather + traffic) ---------- */
+/* ---------- expected-range bar (anomaly cards only) ----------
+   The heuristic gives no sense of "how far outside normal" - just a
+   threshold crossed or not. This draws the vehicle's own AI_DETECT_ANOMALIES
+   expected band (lower_bound..upper_bound, shaded) with a marker for the
+   actual speed, so a barely-outside-band anomaly reads differently at a
+   glance than a wildly-outside one. */
+function boundsBar(actual, lower, upper){
+  if ([actual, lower, upper].some(v => v == null || Number.isNaN(v))) return '';
+  const span = Math.max(upper - lower, 1);
+  const pad = span * 0.6; // draw margin beyond the band so the marker isn't ever pinned to the very edge
+  const min = lower - pad, max = upper + pad;
+  const pct = (v) => Math.max(0, Math.min(100, ((v - min) / (max - min)) * 100));
+  const lo = pct(lower), hi = pct(upper), mark = pct(actual);
+  const outside = actual < lower || actual > upper;
+  return `<div style="position:relative;height:6px;background:var(--line);border-radius:3px;margin-top:7px;">
+    <div style="position:absolute;left:${lo}%;width:${Math.max(hi - lo, 1)}%;height:100%;background:rgba(29,150,79,.35);border-radius:3px;" title="expected range"></div>
+    <div style="position:absolute;left:${mark}%;top:-3px;width:2px;height:12px;background:${outside ? 'var(--red-dim)' : 'var(--green)'};" title="actual speed"></div>
+  </div>`;
+}
+
+/* ---------- per-card AI verdict badge (heuristic cards only) ----------
+   Answers "how can you tell" directly on each card, rather than asking the
+   viewer to trust the KPI tiles above: aiVerdict comes from the exact same
+   getRiskComparison logic (context-engine.js), just rendered per-event
+   instead of only summed. null (SIMULATED mode - no real anomaly feed to
+   compare against) renders nothing. */
+function aiVerdictBadge(verdict){
+  if (verdict === 'confirmed') return `<div style="margin-top:6px;font-size:10.5px;color:var(--green);">✓ AI also flagged this vehicle as anomalous around this time</div>`;
+  if (verdict === 'normal-for-vehicle') return `<div style="margin-top:6px;font-size:10.5px;color:var(--amber);">AI: normal range for this vehicle — no corroborating anomaly nearby</div>`;
+  if (verdict === 'not-evaluated') return `<div style="margin-top:6px;font-size:10.5px;color:var(--steel);">harsh-braking trigger — not evaluated by AI (speed-only model)</div>`;
+  return '';
+}
+
+/* ---------- driver-risk event feeds (heuristic vs. AI_DETECT_ANOMALIES) ----------
+   Both render the same shape of card as renderFeed's recommendation feed
+   (same .feed/.rec classes, column-reverse) but from the two raw event
+   topics rather than ai.safety.recommendations, so the difference in what
+   gets flagged - not just the recommendation text - is visible side by side. */
+function renderRiskEventFeed(elId, events, kind){
+  const feed = document.getElementById(elId);
+  if (!feed || !events) return;
+  feed.innerHTML = '';
+  if (!events.length){
+    const empty = document.createElement('div');
+    empty.style.cssText = 'margin:auto;text-align:center;color:var(--steel);font-size:12px;padding:20px;max-width:220px;';
+    empty.textContent = kind === 'anomaly'
+      ? 'No anomalies flagged yet - AI_DETECT_ANOMALIES needs a few dozen data points per vehicle to learn a baseline before it can flag a deviation.'
+      : 'No heuristic risk events yet - waiting for a vehicle to overspeed or brake harshly.';
+    feed.appendChild(empty);
+    return;
+  }
+  [...events].reverse().forEach(e=>{
+    const div = document.createElement('div');
+    div.className = 'rec ' + feedSeverityClass(e.riskLevel);
+    // event_time is ISO ("...T...Z") from driver.risk.events but a plain
+    // "yyyy-MM-dd HH:mm:ss.SSS" string (Flink's CAST(TIMESTAMP AS STRING))
+    // from driver.risk.events.anomaly - normalize the separator so both parse.
+    const when = e.eventTime ? new Date(e.eventTime.replace(' ', 'T')).toLocaleTimeString('en-AU', {hour12:false}) : '';
+    const body = kind === 'anomaly'
+      ? `${e.speedKmh?.toFixed?.(1) ?? e.speedKmh} km/h vs forecast ${e.forecastSpeedKmh?.toFixed?.(1) ?? e.forecastSpeedKmh} km/h (expected ${e.lowerBound?.toFixed?.(1) ?? e.lowerBound}–${e.upperBound?.toFixed?.(1) ?? e.upperBound})${boundsBar(e.speedKmh, e.lowerBound, e.upperBound)}`
+      : `${e.speedKmh?.toFixed?.(1) ?? e.speedKmh ?? '—'} km/h · ${e.overspeedStatus || ''} · harsh-braking score ${e.harshBrakingScore?.toFixed?.(2) ?? e.harshBrakingScore ?? '—'}${aiVerdictBadge(e.aiVerdict)}`;
+    div.innerHTML = `<div class="meta"><span>${e.vehicleId} · ${(e.riskLevel||'').toUpperCase()}</span><span class="conf">${when}</span></div>${body}`;
+    feed.appendChild(div);
+  });
+}
+
+/* ---------- network conditions (weather + traffic) ----------
+   An incident only reads as "active" for ACTIVE_INCIDENT_WINDOW_MS after its
+   own timestamp - previously this just checked "does any incident for this
+   geozone exist in the last 30 fetched, whenever it happened," so a geozone
+   could show a stale "collision reported" pill for well over an hour before
+   enough newer incidents elsewhere pushed it out of that window. Comparing
+   against the current time instead makes it self-clearing. */
+const ACTIVE_INCIDENT_WINDOW_MS = 10 * 60 * 1000;
 function renderNetworkConditions(weatherList, trafficIncidents){
   const el = document.getElementById('network-conditions');
   if (!el) return;
+  const now = Date.now();
   const rows = weatherList.map(w=>{
-    const active = trafficIncidents.find(i=>i.geozone===w.geozone);
+    const active = trafficIncidents.find(i => i.geozone===w.geozone && (now - Date.parse(i.timestamp)) < ACTIVE_INCIDENT_WINDOW_MS);
     const wetClass = (w.condition==='light rain'||w.condition==='heavy rain'||w.condition==='fog') ? 'warn' : '';
     return `<tr>
       <td>${w.geozone}</td>
       <td class="${wetClass}">${w.condition} · ${Math.round(w.tempC||0)}°C</td>
-      <td>${active ? `<span class="pill high">${active.type}</span>` : '<span class="pill low">clear</span>'}</td>
+      <td>${active ? `<span class="pill high">${active.type.toUpperCase()}</span>` : '<span class="pill low">CLEAR</span>'}</td>
     </tr>`;
   }).join('');
   el.innerHTML = rows;
 }
 
-/* ---------- business-impact KPIs (Overview "Today" tiles) ----------
+/* ---------- business-impact KPIs (Overview "Recent impact" tiles) ----------
    AVG_PARCEL_REVENUE is a documented assumption (avg. revenue per parcel
    delivery), not a real figure - there's no real pricing data source in
    this demo. Severity weighting reflects that a "congestion/roadworks"
    disruption usually still completes (partial SLA risk), while a
    "collision reported/road closure" more often means a genuinely missed
-   delivery window (full value at risk). The trigger itself is now real:
-   each real traffic incident (deduped by geozone+timestamp so a still-
-   active incident isn't re-counted every poll) is intersected with the
-   real vehicles/parcel load in that geozone at first sighting. */
+   delivery window (full value at risk).
+
+   Recomputed fresh from the currently-fetched incident window on every
+   poll, NOT an ever-growing running total - a prior version accumulated
+   every distinct geozone+timestamp incident forever for as long as the tab
+   stayed open, which let the number climb to implausible levels within
+   minutes since telemetry-simulator.js manufactures a fresh incident every
+   30-90s. Recomputing fresh each time bounds the number to whatever's in
+   the currently-fetched window (/api/traffic-incidents?limit=30) and lets
+   it fall as old incidents age out, not just rise. */
 const AVG_PARCEL_REVENUE = 14.50;
 const SEVERITY_REVENUE_WEIGHT = { high:1.0, medium:0.6, low:0.35 };
-let impactedDeliveriesToday = 0;
-let impactedRevenueToday = 0;
-const countedIncidentKeys = new Set();
 function updateImpactKPIs(vehicles, trafficIncidents){
   const byGeozone = {};
   vehicles.forEach(v=>{ if (v.geozone) (byGeozone[v.geozone] ||= []).push(v); });
+  let impactedDeliveries = 0;
+  let impactedRevenue = 0;
   trafficIncidents.forEach(inc=>{
-    const key = inc.geozone + '|' + inc.timestamp;
-    if (countedIncidentKeys.has(key)) return;
-    countedIncidentKeys.add(key);
     const parcels = (byGeozone[inc.geozone] || []).reduce((s,v)=>s+(v.parcelsOnboard||0),0);
     if (parcels > 0){
-      impactedDeliveriesToday += parcels;
-      impactedRevenueToday += parcels * AVG_PARCEL_REVENUE * (SEVERITY_REVENUE_WEIGHT[inc.severity] ?? 0.5);
+      impactedDeliveries += parcels;
+      impactedRevenue += parcels * AVG_PARCEL_REVENUE * (SEVERITY_REVENUE_WEIGHT[inc.severity] ?? 0.5);
     }
   });
-  document.getElementById('kpi-impacted-deliveries').textContent = impactedDeliveriesToday.toLocaleString('en-AU');
-  document.getElementById('kpi-impacted-revenue').textContent = '$' + Math.round(impactedRevenueToday).toLocaleString('en-AU');
+  animateNumber('kpi-impacted-deliveries', impactedDeliveries.toLocaleString('en-AU'));
+  animateNumber('kpi-impacted-revenue', '$' + Math.round(impactedRevenue).toLocaleString('en-AU'));
+}
+
+/* ---------- animated KPI numbers ----------
+   Values update every ~3s poll; snapping the text instantly read as "the
+   page refreshed" rather than "this is live." Tweens the numeric part over
+   500ms while preserving any prefix ($) and suffix (/hr, %, km/h, psi, °C) -
+   falls back to an instant set for non-numeric values ("—", strings) or
+   when the format itself changed, since there's nothing sensible to tween
+   between two different units. */
+function animateNumber(id, targetText){
+  const el = document.getElementById(id);
+  if (!el) return;
+  targetText = String(targetText);
+  const parse = (s) => {
+    const m = s.replace(/,/g, '').match(/^([^\d-]*)(-?\d+(?:\.\d+)?)(.*)$/);
+    if (!m) return null;
+    return { prefix: m[1], value: parseFloat(m[2]), decimals: (m[2].split('.')[1] || '').length, suffix: m[3] };
+  };
+  const from = parse(el.textContent);
+  const to = parse(targetText);
+  if (!from || !to || from.prefix !== to.prefix || from.suffix !== to.suffix || from.value === to.value){
+    el.textContent = targetText;
+    return;
+  }
+  const decimals = Math.max(from.decimals, to.decimals);
+  const startValue = from.value, endValue = to.value, startTime = performance.now(), duration = 500;
+  (function step(now){
+    const t = Math.min(1, (now - startTime) / duration);
+    const current = startValue + (endValue - startValue) * t;
+    el.textContent = to.prefix + current.toLocaleString('en-AU', {minimumFractionDigits:decimals, maximumFractionDigits:decimals}) + to.suffix;
+    if (t < 1) requestAnimationFrame(step); else el.textContent = targetText;
+  })(startTime);
 }
 
 /* ---------- per-view render functions ---------- */
 function renderOverview(summary, vehicles, weatherList, trafficIncidents, recs){
-  document.getElementById('kpi-vehicles').textContent = summary.vehiclesOnline ?? '—';
+  animateNumber('kpi-vehicles', summary.vehiclesOnline ?? '—');
   document.getElementById('kpi-vehicles-delta').textContent = 'reporting';
-  document.getElementById('kpi-eps').textContent = summary.eventsPerSecond ?? '—';
+  animateNumber('kpi-eps', summary.eventsPerSecond ?? '—');
   const counts = summary.recommendationCounts || {};
   const openRecs = (counts.safety||0) + (counts.delivery||0) + (counts.maintenance||0);
-  document.getElementById('kpi-recs').textContent = openRecs;
+  animateNumber('kpi-recs', openRecs);
   document.getElementById('kpi-recs-delta').textContent = openRecs ? `safety ${counts.safety||0} · delivery ${counts.delivery||0} · maint ${counts.maintenance||0}` : '—';
-  document.getElementById('kpi-eta').textContent = summary.avgParcelsDeliveredPerHour != null ? summary.avgParcelsDeliveredPerHour.toFixed(1) + '/hr' : '—';
+  animateNumber('kpi-eta', summary.avgParcelsDeliveredPerHour != null ? summary.avgParcelsDeliveredPerHour.toFixed(1) + '/hr' : '—');
 
   updateImpactKPIs(vehicles, trafficIncidents);
   renderMap(vehicles);
@@ -492,38 +844,58 @@ function renderOverview(summary, vehicles, weatherList, trafficIncidents, recs){
   document.getElementById('count-live').textContent = summary.openRecommendations ?? 0;
 }
 
-function renderSafety(summary, vehicles, recs){
-  document.getElementById('safety-high').textContent = summary.highDriverRiskCount ?? 0;
-  document.getElementById('safety-harsh').textContent = summary.harshBrakingEventsRecent ?? 0;
-  document.getElementById('safety-speed').textContent = summary.overspeedEventsRecent ?? 0;
-  document.getElementById('safety-highrisk').textContent = summary.highRiskEventsRecent ?? 0;
+function renderSafety(summary, vehicles, recs, riskHeuristic, riskAnomaly, riskComparison){
+  animateNumber('safety-high', summary.highDriverRiskCount ?? 0);
+  animateNumber('safety-harsh', summary.harshBrakingEventsRecent ?? 0);
+  animateNumber('safety-speed', summary.overspeedEventsRecent ?? 0);
+  animateNumber('safety-highrisk', summary.highRiskEventsRecent ?? 0);
   renderSafetyTable(vehicles);
   renderFeed('feed-safety', recs);
+  renderRiskEventFeed('feed-risk-heuristic', riskHeuristic, 'heuristic');
+  renderRiskEventFeed('feed-risk-anomaly', riskAnomaly, 'anomaly');
+  renderRiskComparison(riskComparison);
+}
+
+/* ---------- heuristic-vs-AI comparison KPIs ----------
+   Turns "two separate lists" into a value story: of the heuristic's
+   overspeed alerts (the one signal both jobs actually share), how many
+   does AI consider normal for that specific vehicle, and how many real
+   deviations would a fixed threshold never have caught at all. Every
+   number here is reproducible from the per-card aiVerdict badges in the
+   two feeds below, not an unverifiable aggregate. */
+function renderRiskComparison(cmp){
+  if (!cmp) return;
+  document.getElementById('cmp-window').textContent = cmp.windowMinutes ?? 15;
+  document.getElementById('cmp-braking-only').textContent = cmp.brakingOnlyHeuristicCount ?? 0;
+  animateNumber('cmp-heuristic', cmp.overspeedHeuristicCount ?? 0);
+  animateNumber('cmp-noise', cmp.overspeedNoiseCount ?? 0);
+  animateNumber('cmp-anomaly', cmp.anomalyCount ?? 0);
+  animateNumber('cmp-missed', cmp.anomalyMissedByHeuristicCount ?? 0);
 }
 
 function renderDelivery(summary, vehicles, recs){
-  document.getElementById('del-ontime').textContent = summary.onTimeRatePct != null ? summary.onTimeRatePct + '%' : '—';
-  document.getElementById('del-disrupt').textContent = summary.routesDisruptedCount ?? 0;
+  animateNumber('del-ontime', summary.onTimeRatePct != null ? summary.onTimeRatePct + '%' : '—');
+  animateNumber('del-disrupt', summary.routesDisruptedCount ?? 0);
   const avgSpeed = vehicles.length ? vehicles.reduce((s,v)=>s+(v.speed||0),0) / vehicles.length : 0;
-  document.getElementById('del-speed').textContent = vehicles.length ? avgSpeed.toFixed(0) + ' km/h' : '—';
-  document.getElementById('del-parcels').textContent = summary.totalParcelsOnboard ?? 0;
+  animateNumber('del-speed', vehicles.length ? avgSpeed.toFixed(0) + ' km/h' : '—');
+  animateNumber('del-parcels', summary.totalParcelsOnboard ?? 0);
   renderFeed('feed-delivery', recs);
 }
 
 function renderMaintenance(summary, vehicles, recs){
-  document.getElementById('maint-risk').textContent = summary.highMaintenanceRiskCount ?? 0;
-  document.getElementById('maint-wo').textContent = summary.openWorkOrders ?? '—';
-  document.getElementById('maint-temp').textContent = summary.avgEngineTempC != null ? summary.avgEngineTempC.toFixed(0) + '°C' : '—';
-  document.getElementById('maint-tyre').textContent = summary.avgTyrePressurePsi != null ? summary.avgTyrePressurePsi.toFixed(0) + ' psi' : '—';
+  animateNumber('maint-risk', summary.highMaintenanceRiskCount ?? 0);
+  animateNumber('maint-wo', summary.openWorkOrders ?? '—');
+  animateNumber('maint-temp', summary.avgEngineTempC != null ? summary.avgEngineTempC.toFixed(0) + '°C' : '—');
+  animateNumber('maint-tyre', summary.avgTyrePressurePsi != null ? summary.avgTyrePressurePsi.toFixed(0) + ' psi' : '—');
   renderFeed('feed-maintenance', recs);
 }
 
 function renderLivePipeline(summary, recs){
-  document.getElementById('live-vehicles').textContent = summary.vehiclesOnline ?? '—';
+  animateNumber('live-vehicles', summary.vehiclesOnline ?? '—');
   document.getElementById('live-source').textContent = summary.source || '—';
-  document.getElementById('live-temp').textContent = summary.avgEngineTempC != null ? summary.avgEngineTempC.toFixed(1) + '°C' : '—';
-  document.getElementById('live-risk').textContent = (summary.highDriverRiskCount||0) + (summary.highMaintenanceRiskCount||0);
-  document.getElementById('live-recs').textContent = summary.openRecommendations ?? '—';
+  animateNumber('live-temp', summary.avgEngineTempC != null ? summary.avgEngineTempC.toFixed(1) + '°C' : '—');
+  animateNumber('live-risk', (summary.highDriverRiskCount||0) + (summary.highMaintenanceRiskCount||0));
+  animateNumber('live-recs', summary.openRecommendations ?? '—');
   renderFeed('feed-live', recs);
 }
 
@@ -531,7 +903,7 @@ function renderLivePipeline(summary, recs){
 async function poll(){
   try {
     await liveFetch('/api/health');
-    const [summary, vehicles, weatherList, trafficIncidents, recsAll, recsSafety, recsDelivery, recsMaintenance] = await Promise.all([
+    const [summary, vehicles, weatherList, trafficIncidents, recsAll, recsSafety, recsDelivery, recsMaintenance, riskHeuristic, riskAnomaly, riskComparison] = await Promise.all([
       liveFetch('/api/fleet-summary'),
       liveFetch('/api/vehicles'),
       liveFetch('/api/weather'),
@@ -540,14 +912,20 @@ async function poll(){
       liveFetch('/api/recommendations?domain=safety&limit=12'),
       liveFetch('/api/recommendations?domain=delivery&limit=12'),
       liveFetch('/api/recommendations?domain=maintenance&limit=12'),
+      liveFetch('/api/driver-risk-events?limit=15'),
+      liveFetch('/api/driver-risk-events-anomaly?limit=15'),
+      liveFetch('/api/risk-comparison'),
     ]);
-    setLiveStatus(true, (summary.source==='live-confluent-cloud' ? 'LIVE — real Confluent Cloud + Flink + Bedrock' : 'Connected — fleet-context-engine SIMULATED fallback (no Confluent Cloud env vars set)') + (summary.consumerCaughtUp===false ? ' · consumer still catching up…' : ''));
+    setLiveStatus(true, (summary.source==='live-confluent-cloud' ? 'LIVE — real Confluent Cloud + Flink + OpenAI' : 'Connected — fleet-context-engine SIMULATED fallback (no Confluent Cloud env vars set)') + (summary.consumerCaughtUp===false ? ' · consumer still catching up…' : ''));
 
     renderOverview(summary, vehicles, weatherList, trafficIncidents, recsAll);
-    renderSafety(summary, vehicles, recsSafety);
+    renderSafety(summary, vehicles, recsSafety, riskHeuristic, riskAnomaly, riskComparison);
     renderDelivery(summary, vehicles, recsDelivery);
     renderMaintenance(summary, vehicles, recsMaintenance);
     renderLivePipeline(summary, recsAll);
+    checkTraceProgress(recsMaintenance);
+    lastPollTime = Date.now();
+    tickFreshness();
   } catch (err) {
     setLiveStatus(false);
   }
@@ -555,12 +933,103 @@ async function poll(){
 poll();
 setInterval(poll, 3000);
 
+/* ---------- trace strip: watch one injected event's real journey through the pipeline ----------
+   Stage 1 (Injected) and stage 4 (Live/recommendation) are both directly
+   observed from real API responses. Stage 2 (Flink derived) is observed via
+   the new /api/maintenance-alerts endpoint, correlated by vehicleId + a
+   receivedAt >= the injection's own timestamp. Stage 3 (AI reasoning) has no
+   independent signal - there's no separate Kafka message for "OpenAI was
+   called" - so it's shown as an inferred in-progress state between stages 2
+   and 4, not something actually observed. */
+let activeTrace = null; // { vehicleId, injectedAt, stage, stageTimes: {1,2,3,4}, hideTimer }
+const TRACE_STEPS = [
+  {n:1, label:'Injected'},
+  {n:2, label:'Flink derived'},
+  {n:3, label:'AI reasoning'},
+  {n:4, label:'Live'},
+];
+
+function startTrace(vehicleId){
+  if (activeTrace && activeTrace.hideTimer) clearTimeout(activeTrace.hideTimer);
+  const now = Date.now();
+  activeTrace = { vehicleId, injectedAt: now, stage: 1, stageTimes: {1: now} };
+  document.getElementById('traceVehicle').textContent = vehicleId;
+  document.getElementById('traceStrip').style.display = 'block';
+  renderTraceStrip();
+}
+
+function renderTraceStrip(){
+  const strip = document.getElementById('traceStrip');
+  if (!activeTrace){ strip.style.display = 'none'; return; }
+  // While waiting for stage 4, treat stage 3 (AI reasoning) as the visually
+  // active step once stage 2 has fired - it has no signal of its own.
+  const displayStage = activeTrace.stage === 2 ? 3 : activeTrace.stage;
+  const el = document.getElementById('traceSteps');
+  el.innerHTML = TRACE_STEPS.map((s, i) => {
+    let status;
+    if (activeTrace.stage >= 4) status = 'done';
+    else if (s.n < displayStage) status = 'done';
+    else if (s.n === displayStage) status = 'active';
+    else status = 'pending';
+
+    const stageTime = activeTrace.stageTimes[s.n];
+    const elapsedLabel = stageTime ? `+${((stageTime - activeTrace.injectedAt)/1000).toFixed(1)}s` : '';
+    const dotColor = status === 'done' ? 'var(--green)' : status === 'pending' ? 'var(--line)' : '';
+    const dotClass = status === 'active' ? 'trace-dot-active' : '';
+    const textColor = status === 'pending' ? 'var(--steel)' : 'var(--ink)';
+    const connectorColor = (status === 'done') ? 'var(--green)' : 'var(--line)';
+    const connector = i < TRACE_STEPS.length - 1
+      ? `<div style="flex:1;height:2px;background:${connectorColor};min-width:16px;"></div>`
+      : '';
+    return `
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+        <span class="${dotClass}" style="width:9px;height:9px;border-radius:50%;${dotColor?`background:${dotColor};`:''}display:inline-block;"></span>
+        <span style="font-size:11.5px;color:${textColor};font-weight:${status==='pending'?400:600};">${s.label}</span>
+        <span style="font-family:var(--font-mono);font-size:10px;color:var(--steel);min-width:32px;">${elapsedLabel}</span>
+      </div>
+      ${connector}
+    `;
+  }).join('');
+}
+
+async function checkTraceProgress(recsMaintenance){
+  if (!activeTrace || activeTrace.stage >= 4) return;
+  const now = Date.now();
+
+  if (activeTrace.stage < 2){
+    try {
+      const alerts = await liveFetch('/api/maintenance-alerts?vehicleId=' + encodeURIComponent(activeTrace.vehicleId) + '&limit=5');
+      const fresh = alerts.find(a => a.receivedAt >= activeTrace.injectedAt);
+      if (fresh){
+        activeTrace.stage = 2;
+        activeTrace.stageTimes[2] = now;
+        renderTraceStrip();
+      }
+    } catch { /* transient - next poll cycle will retry */ }
+  }
+
+  const freshRec = (recsMaintenance || []).find(r => r.vehicleId === activeTrace.vehicleId && Date.parse(r.timestamp) >= activeTrace.injectedAt);
+  if (freshRec){
+    activeTrace.stage = 4;
+    activeTrace.stageTimes[4] = now;
+    activeTrace.stageTimes[3] = activeTrace.stageTimes[3] || now;
+    renderTraceStrip();
+    activeTrace.hideTimer = setTimeout(()=>{ activeTrace = null; renderTraceStrip(); }, 10000);
+  }
+}
+
+document.getElementById('traceCloseBtn').addEventListener('click', ()=>{
+  if (activeTrace && activeTrace.hideTimer) clearTimeout(activeTrace.hideTimer);
+  activeTrace = null;
+  renderTraceStrip();
+});
+
 /* ---------- demo controls ---------- */
 document.getElementById('liveInjectBtn').addEventListener('click', async ()=>{
   if (!liveConnected){ alert('Not connected to fleet-context-engine — see SETUP.md to enable LIVE mode.'); return; }
   try {
     const result = await liveFetch('/api/inject-incident', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
-    alert('Injected real engine spike on ' + result.id + '. ' + (result.note||''));
+    startTrace(result.id);
   } catch (err) {
     alert('Failed to inject: ' + err.message);
   }
@@ -574,11 +1043,20 @@ document.getElementById('liveTrafficBtn').addEventListener('click', async ()=>{
     alert('Failed to inject: ' + err.message);
   }
 });
+document.getElementById('liveSpeedAnomalyBtn').addEventListener('click', async ()=>{
+  if (!liveConnected){ alert('Not connected to fleet-context-engine — see SETUP.md to enable LIVE mode.'); return; }
+  try {
+    const result = await liveFetch('/api/inject-speed-anomaly', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    alert('Injected a ' + result.speedKmh + ' km/h spike on ' + result.id + ' in ' + result.geozone + '. ' + (result.note||'') + '\n\nCheck the Safety tab’s Heuristic vs. AI_DETECT_ANOMALIES panel in a few seconds.');
+  } catch (err) {
+    alert('Failed to inject: ' + err.message);
+  }
+});
 document.getElementById('liveResetBtn').addEventListener('click', async ()=>{
   if (!liveConnected){ alert('Not connected to fleet-context-engine — see SETUP.md to enable LIVE mode.'); return; }
   const ok = confirm(
     'This PERMANENTLY deletes all real data in the 10 Confluent Cloud topics — ' +
-    'every seeded telemetry record and every real Bedrock recommendation generated so far. ' +
+    'every seeded telemetry record and every real OpenAI recommendation generated so far. ' +
     'This cannot be undone.\n\nThe topics, their schemas, and the 6 Flink jobs are NOT touched — ' +
     'only the messages inside them.\n\nContinue?'
   );
@@ -602,6 +1080,266 @@ document.getElementById('liveResetBtn').addEventListener('click', async ()=>{
     btn.disabled = false;
   }
 });
+
+/* ---------- ask the live data: chat widget on Live Overview (NL -> RTCE real SQL, via fleet-context-engine's OpenAI agent) ---------- */
+// chatHistory holds plain {role, content} turns only (no tool-call internals)
+// - that's what gets resent as conversation context on every new question.
+let chatHistory = [];
+
+function escapeHtml(s){
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+// Deliberately minimal: the system prompt forbids markdown entirely, so this
+// is just a safety net for stray emphasis, not a full markdown renderer.
+function renderInlineMarkdown(raw){
+  let s = escapeHtml(raw || '');
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  return s;
+}
+
+function appendChatMessage(role, html){
+  const wrap = document.createElement('div');
+  wrap.style.alignSelf = role === 'user' ? 'flex-end' : 'flex-start';
+  wrap.style.maxWidth = '85%';
+  wrap.style.padding = '8px 11px';
+  wrap.style.borderRadius = '10px';
+  wrap.style.fontSize = '12.5px';
+  wrap.style.lineHeight = '1.45';
+  wrap.style.overflowWrap = 'anywhere';
+  wrap.style.wordBreak = 'break-word';
+  if (role === 'user'){
+    wrap.style.background = 'var(--purple)';
+    wrap.style.color = '#fff';
+  } else {
+    wrap.style.background = 'var(--panel-light)';
+    wrap.style.border = '1px solid var(--line)';
+    wrap.style.color = 'var(--ink)';
+  }
+  wrap.innerHTML = html;
+  const messages = document.getElementById('chatMessages');
+  messages.appendChild(wrap);
+  messages.scrollTop = messages.scrollHeight;
+  return wrap;
+}
+
+function appendChatTrace(container, trace){
+  if (!trace || !trace.length) return;
+  const details = document.createElement('details');
+  details.style.cssText = 'margin-top:6px;max-width:100%;overflow-wrap:anywhere;word-break:break-word;';
+  const summary = document.createElement('summary');
+  summary.textContent = 'How I got this';
+  summary.style.cursor = 'pointer';
+  summary.style.fontSize = '10.5px';
+  summary.style.color = 'var(--steel)';
+  summary.style.fontFamily = 'var(--font-mono)';
+  details.appendChild(summary);
+  const body = document.createElement('div');
+  body.style.cssText = 'font-family:var(--font-mono);font-size:10.5px;color:var(--steel);margin-top:4px;display:flex;flex-direction:column;gap:4px;overflow-wrap:anywhere;word-break:break-word;';
+  trace.forEach((step, i)=>{
+    const line = document.createElement('div');
+    line.style.cssText = 'overflow-wrap:anywhere;word-break:break-word;';
+    const resultStr = JSON.stringify(step.result);
+    line.textContent = `${i+1}. ${step.tool}(${JSON.stringify(step.arguments)}) → ${resultStr.length>200 ? resultStr.slice(0,200)+'…' : resultStr}`;
+    body.appendChild(line);
+  });
+  details.appendChild(body);
+  container.appendChild(details);
+}
+
+// Example questions chosen to fit RTCE's real SQL grammar well (recent-event
+// lookups, ORDER BY + LIMIT) and steer away from "how many/count" style
+// questions, which the underlying SQL can't aggregate and the model tends to
+// answer unreliably (see nl-query-agent.js) - a live demo shouldn't invite
+// that failure mode by leaving the input blank with no hint of what to ask.
+const CHAT_EXAMPLE_QUESTIONS = [
+  "What's the most recent high-severity maintenance alert?",
+  "What's the latest traffic incident, and how severe is it?",
+  "Which vehicle currently has the highest engine temperature?",
+  "What's the latest AI-generated safety recommendation?",
+];
+
+function renderChatSuggestions(){
+  const el = document.getElementById('chatSuggestions');
+  el.innerHTML = '';
+  CHAT_EXAMPLE_QUESTIONS.forEach(q=>{
+    const chip = document.createElement('button');
+    chip.textContent = q;
+    chip.style.cssText = 'text-align:left;background:var(--panel-light);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:7px 10px;font-size:11.5px;font-family:var(--font-body);cursor:pointer;';
+    chip.addEventListener('click', ()=>{
+      document.getElementById('chatInput').value = q;
+      sendChatMessage();
+    });
+    el.appendChild(chip);
+  });
+}
+renderChatSuggestions();
+
+async function sendChatMessage(){
+  const input = document.getElementById('chatInput');
+  const sendBtn = document.getElementById('chatSendBtn');
+  const question = input.value.trim();
+  if (!question) return;
+  if (!liveConnected){ appendChatMessage('assistant', escapeHtml('Not connected to fleet-context-engine — see SETUP.md to enable LIVE mode.')); return; }
+
+  input.value = '';
+  document.getElementById('chatSuggestions').style.display = 'none';
+  appendChatMessage('user', escapeHtml(question));
+  chatHistory.push({role:'user', content: question});
+
+  sendBtn.disabled = true;
+  const answerEl = appendChatMessage('assistant', '<span style="color:var(--steel);">thinking…</span>');
+  try {
+    const result = await liveFetch('/api/ask', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({conversation: chatHistory})});
+    const answer = result.answer || '(no answer returned)';
+    answerEl.innerHTML = renderInlineMarkdown(answer);
+    appendChatTrace(answerEl, result.trace);
+    chatHistory.push({role:'assistant', content: answer});
+  } catch (err) {
+    answerEl.innerHTML = renderInlineMarkdown('Failed to get an answer: ' + err.message);
+  } finally {
+    sendBtn.disabled = false;
+  }
+}
+
+document.getElementById('chatLauncher').addEventListener('click', ()=>{
+  document.getElementById('chatPanel').style.display = 'flex';
+  document.getElementById('chatLauncher').style.display = 'none';
+  document.getElementById('chatInput').focus();
+});
+document.getElementById('chatCloseBtn').addEventListener('click', ()=>{
+  document.getElementById('chatPanel').style.display = 'none';
+  document.getElementById('chatLauncher').style.display = 'flex';
+});
+document.getElementById('chatSendBtn').addEventListener('click', sendChatMessage);
+document.getElementById('chatInput').addEventListener('keydown', (e)=>{ if (e.key === 'Enter') sendChatMessage(); });
+
+// Not a real turn (not pushed to chatHistory) - just orients a first-time user.
+appendChatMessage('assistant', escapeHtml("Ask me anything about the live fleet — I'll run real SQL against the live Kafka topics via RTCE to answer, not a canned response."));
+
+/* ---------- Behind the Scenes: real-time pipeline diagram ----------
+   Fixed layout for the diagram, drawn against a 1200x300 canvas and scaled
+   responsively via the SVG viewBox (same technique as this console's map).
+   Node/edge activity is driven entirely by fleet-context-engine's real
+   /api/pipeline-events - see context-engine.js's TOPIC_PULSE_HOPS for what
+   each hop actually represents. Nothing here is client-side simulated. */
+const BTS_W = 1200, BTS_H = 300;
+const BTS_NODES = {
+  source:        { x:10,   y:115, w:120, h:90, kind:'source',    label:'Sources',           sub:'vehicle / weather /\ntraffic / parcel sims', static:true },
+  kafka:         { x:165,  y:115, w:120, h:90, kind:'kafka',     label:'Kafka',              sub:'10 topics\nraw + business + AI' },
+  flinkBusiness: { x:320,  y:115, w:140, h:90, kind:'flink',     label:'Flink · Business',  sub:'maintenance / driver-risk /\ndelivery derivation' },
+  flinkAi:       { x:495,  y:115, w:140, h:90, kind:'flink',     label:'Flink · AI Advisor',sub:'ML_PREDICT → OpenAI' },
+  serve:         { x:670,  y:115, w:110, h:90, kind:'serve',     label:'Serve',              sub:'fleet-context-engine\nKafka consumer' },
+  app:           { x:830,  y:15,  w:150, h:70, kind:'app',       label:'App',                sub:'this console' },
+  agent:         { x:830,  y:115, w:150, h:70, kind:'agent',     label:'Agent',              sub:'RTCE · MCP\n(Claude, Copilot)' },
+  tableflow:     { x:830,  y:215, w:150, h:70, kind:'tableflow', label:'Tableflow',          sub:'Iceberg · Confluent\nmanaged storage' },
+  snowflake:     { x:1020, y:215, w:150, h:70, kind:'snowflake', label:'Snowflake',          sub:'query layer ·\nbroad analytics' },
+};
+const BTS_KIND_COLOR = { source:'steel', kafka:'blue', flink:'amber', serve:'green', app:'blue', agent:'purple', tableflow:'green', snowflake:'red-dim' };
+
+function btsMid(n){ return { x: n.x + n.w/2, y: n.y + n.h/2 }; }
+
+const BTS_GOV_PAD = 14;
+const btsGov = {
+  x: BTS_NODES.kafka.x - BTS_GOV_PAD,
+  y: BTS_NODES.kafka.y - BTS_GOV_PAD,
+  w: (BTS_NODES.serve.x + BTS_NODES.serve.w) - BTS_NODES.kafka.x + BTS_GOV_PAD * 2,
+  h: BTS_NODES.kafka.h + BTS_GOV_PAD * 2,
+};
+
+const BTS_EDGES = (() => {
+  const s = btsMid(BTS_NODES.source), k = btsMid(BTS_NODES.kafka), fb = btsMid(BTS_NODES.flinkBusiness),
+        fa = btsMid(BTS_NODES.flinkAi), sv = btsMid(BTS_NODES.serve), ap = btsMid(BTS_NODES.app),
+        ag = btsMid(BTS_NODES.agent), tf = btsMid(BTS_NODES.tableflow), sf = btsMid(BTS_NODES.snowflake);
+  const branchX = BTS_NODES.serve.x + BTS_NODES.serve.w + 25;
+  return {
+    'source-kafka':          { d:`M ${BTS_NODES.source.x + BTS_NODES.source.w} ${s.y} L ${BTS_NODES.kafka.x} ${k.y}`, color:'blue' },
+    'kafka-flinkBusiness':   { d:`M ${BTS_NODES.kafka.x + BTS_NODES.kafka.w} ${k.y} L ${BTS_NODES.flinkBusiness.x} ${fb.y}`, color:'amber' },
+    'flinkBusiness-flinkAi': { d:`M ${BTS_NODES.flinkBusiness.x + BTS_NODES.flinkBusiness.w} ${fb.y} L ${BTS_NODES.flinkAi.x} ${fa.y}`, color:'amber' },
+    'flinkAi-serve':         { d:`M ${BTS_NODES.flinkAi.x + BTS_NODES.flinkAi.w} ${fa.y} L ${BTS_NODES.serve.x} ${sv.y}`, color:'green' },
+    'serve-app':             { d:`M ${BTS_NODES.serve.x + BTS_NODES.serve.w} ${sv.y} L ${branchX} ${sv.y} L ${branchX} ${ap.y} L ${BTS_NODES.app.x} ${ap.y}`, color:'blue' },
+    'serve-agent':           { d:`M ${BTS_NODES.serve.x + BTS_NODES.serve.w} ${sv.y} L ${BTS_NODES.agent.x} ${ag.y}`, color:'purple' },
+    'serve-tableflow':       { d:`M ${BTS_NODES.serve.x + BTS_NODES.serve.w} ${sv.y} L ${branchX} ${sv.y} L ${branchX} ${tf.y} L ${BTS_NODES.tableflow.x} ${tf.y}`, color:'green' },
+    'tableflow-snowflake':   { d:`M ${BTS_NODES.tableflow.x + BTS_NODES.tableflow.w} ${tf.y} L ${BTS_NODES.snowflake.x} ${sf.y}`, color:'red-dim' },
+  };
+})();
+
+function btsRenderStatic(){
+  const svg = document.getElementById('bts-edges-svg');
+  const govRect = `<rect class="bts-gov-band" x="${btsGov.x}" y="${btsGov.y}" width="${btsGov.w}" height="${btsGov.h}" rx="10"></rect>
+    <text x="${btsGov.x + 12}" y="${btsGov.y + 13}" class="bts-gov-label">GOVERNANCE · STREAM GOVERNANCE</text>`;
+  const edgePaths = Object.entries(BTS_EDGES).map(([id, e]) =>
+    `<path id="bts-edge-${id}" d="${e.d}" fill="none" stroke="var(--${e.color})" stroke-width="2" opacity="0.45"></path>`
+  ).join('');
+  svg.innerHTML = govRect + edgePaths;
+
+  document.getElementById('bts-nodes').innerHTML = Object.entries(BTS_NODES).map(([id, n]) => {
+    const color = BTS_KIND_COLOR[n.kind] || 'steel';
+    const style = `left:${(n.x / BTS_W) * 100}%;top:${(n.y / BTS_H) * 100}%;width:${(n.w / BTS_W) * 100}%;height:${(n.h / BTS_H) * 100}%;--node-color:var(--${color});`;
+    return `<div class="bts-node${n.static ? ' static' : ''}" id="bts-node-${id}" style="${style}">
+      <span class="lbl">${n.label}</span>
+      <span class="sub">${n.sub}</span>
+    </div>`;
+  }).join('');
+}
+btsRenderStatic();
+
+let btsSparkSeq = 0;
+function btsFireNode(nodeId){
+  const el = document.getElementById('bts-node-' + nodeId);
+  if (!el) return;
+  el.classList.add('active');
+  setTimeout(() => el.classList.remove('active'), 650);
+}
+function btsFireEdge(edgeId){
+  const edge = BTS_EDGES[edgeId];
+  if (!edge) return;
+  const id = btsSparkSeq++;
+  const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  circle.setAttribute('r', 4.5);
+  circle.setAttribute('fill', `var(--${edge.color})`);
+  circle.classList.add('bts-spark');
+  circle.style.offsetPath = `path("${edge.d}")`;
+  circle.id = 'bts-spark-' + id;
+  document.getElementById('bts-edges-svg').appendChild(circle);
+  setTimeout(() => circle.remove(), 750);
+}
+
+function btsAppendEventLog(ev){
+  const body = document.getElementById('bts-eventlog-body');
+  if (!body) return;
+  const row = document.createElement('div');
+  row.className = 'bts-eventlog-row';
+  const when = new Date(ev.ts).toLocaleTimeString('en-AU', {hour12:false});
+  row.innerHTML = `<span>${when} <span class="node-tag">${ev.node}</span></span><span>${ev.detail || ''}</span>`;
+  body.insertBefore(row, body.firstChild);
+  while (body.children.length > 80) body.removeChild(body.lastChild);
+}
+
+let btsLastEventId = 0;
+async function pollPipeline(){
+  try {
+    const data = await liveFetch('/api/pipeline-events?since=' + btsLastEventId);
+    const offlineNote = document.getElementById('bts-offline-note');
+    if (offlineNote) offlineNote.style.display = data.live === false ? 'block' : 'none';
+    if (data.stats){
+      Object.keys(data.stats).forEach(k => {
+        const el = document.getElementById('bts-stat-' + k);
+        if (el) el.textContent = data.stats[k];
+      });
+    }
+    (data.events || []).forEach((ev, i) => {
+      setTimeout(() => {
+        btsFireNode(ev.node);
+        if (ev.edge) btsFireEdge(ev.edge);
+        btsAppendEventLog(ev);
+      }, i * 90);
+    });
+    btsLastEventId = data.latestId ?? btsLastEventId;
+  } catch { /* transient - next poll cycle retries */ }
+}
+pollPipeline();
+setInterval(pollPipeline, 1200);
 
 </script>
 </body>

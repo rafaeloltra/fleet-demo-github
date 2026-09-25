@@ -3,22 +3,22 @@
 # (least-privilege, one identity per app).
 
 resource "confluent_service_account" "app_manager" {
-  display_name = "sa-fleet-app-manager"
+  display_name = "sa-fleet-app-manager-uswest2v2"
   description  = "Manages topics, ACLs and cluster config via Terraform."
 }
 
 resource "confluent_service_account" "vehicle_simulator" {
-  display_name = "sa-vehicle-simulator"
+  display_name = "sa-vehicle-simulator-uswest2v2"
   description  = "Publishes raw FMS telemetry events to vehicle.telemetry."
 }
 
 resource "confluent_service_account" "flink_runner" {
-  display_name = "sa-flink-ai-advisor"
+  display_name = "sa-flink-ai-advisor-uswest2v2"
   description  = "Used by Flink statements to read source topics, call OpenAI, and write ai.* topics."
 }
 
 resource "confluent_service_account" "sumologic_reader" {
-  display_name = "sa-sumologic-consumer"
+  display_name = "sa-sumologic-consumer-uswest2v2"
   description  = "Read-only identity for Sumo Logic dashboards / downstream consumers."
 }
 

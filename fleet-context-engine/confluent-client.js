@@ -61,6 +61,13 @@ const ALL_TOPICS = [
   'ai.maintenance.recommendations', 'ai.safety.recommendations', 'ai.delivery.recommendations',
 ];
 
+// The AI_DETECT_ANOMALIES experiment's topics (terraform-us-west-2*/
+// flink_statements.tf) - only present on those stacks, not the original
+// ap-southeast-2 one. purgeTopic() below no-ops safely (a 404/failure just
+// lands in purgeAllTopics' `failed` list) if a target cluster doesn't have
+// them, so it's safe to always include these rather than detecting first.
+const ANOMALY_TOPICS = ['vehicle_telemetry_ts', 'driver.risk.events.anomaly'];
+
 function topicConfigUrl(topic, config) {
   return `${process.env.KAFKA_REST_ENDPOINT}/kafka/v3/clusters/${process.env.KAFKA_CLUSTER_ID}/topics/${topic}/configs/${config}`;
 }
@@ -96,17 +103,18 @@ async function purgeTopic(topic, headers) {
 }
 
 // Hard-resets the real pipeline: purges all 10 topics in parallel. Does
-// NOT touch Flink statements, the Bedrock model/connection, or any
+// NOT touch Flink statements, the OpenAI model/connection, or any
 // Terraform-managed resource - only the messages inside the topics.
 export async function purgeAllTopics() {
   assertEnv(KAFKA_ENV);
   const headers = { Authorization: basicAuth(process.env.KAFKA_API_KEY, process.env.KAFKA_API_SECRET) };
-  const results = await Promise.allSettled(ALL_TOPICS.map((t) => purgeTopic(t, headers)));
+  const topics = [...ALL_TOPICS, ...ANOMALY_TOPICS];
+  const results = await Promise.allSettled(topics.map((t) => purgeTopic(t, headers)));
   const failed = results
-    .map((r, i) => ({ topic: ALL_TOPICS[i], r }))
+    .map((r, i) => ({ topic: topics[i], r }))
     .filter(({ r }) => r.status === 'rejected')
     .map(({ topic, r }) => ({ topic, error: r.reason.message }));
-  return { purged: ALL_TOPICS.length - failed.length, total: ALL_TOPICS.length, failed };
+  return { purged: topics.length - failed.length, total: topics.length, failed };
 }
 
 // Wire-encodes a record with Confluent's schema-registry framing (magic

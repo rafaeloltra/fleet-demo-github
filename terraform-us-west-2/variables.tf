@@ -13,13 +13,13 @@ variable "confluent_cloud_api_secret" {
 variable "environment_name" {
   description = "Name of the Confluent Cloud environment for this demo."
   type        = string
-  default     = "fleet-telemetry-demo"
+  default     = "fleet-telemetry-demo-us-west-2"
 }
 
 variable "cluster_name" {
   description = "Name of the Kafka cluster."
   type        = string
-  default     = "fleet-cluster"
+  default     = "fleet-cluster-us-west-2"
 }
 
 variable "cluster_cloud" {
@@ -29,9 +29,9 @@ variable "cluster_cloud" {
 }
 
 variable "cluster_region" {
-  description = "Region for the Kafka cluster. ap-southeast-2 = Sydney, kept as the project default (OpenAI's endpoint is a public API, so no regional adjacency requirement here unlike Bedrock)."
+  description = "Region for the Kafka cluster. us-west-2, so AI_DETECT_ANOMALIES (confirmed available in this region via rtce-bug-bash) can be tried against this pipeline's data. Sibling of the ap-southeast-2 stack in ../terraform - kept as a fully separate environment/state so this one can be torn down independently."
   type        = string
-  default     = "ap-southeast-2"
+  default     = "us-west-2"
 }
 
 variable "flink_cloud" {
@@ -41,9 +41,9 @@ variable "flink_cloud" {
 }
 
 variable "flink_region" {
-  description = "Region for the Flink compute pool. Must match cluster_region (ap-southeast-2 / Sydney). Confirm this region is enabled for Flink in your org with: confluent flink region list --cloud AWS"
+  description = "Region for the Flink compute pool. Must match cluster_region (us-west-2). Confirm this region is enabled for Flink in your org with: confluent flink region list --cloud AWS"
   type        = string
-  default     = "ap-southeast-2"
+  default     = "us-west-2"
 }
 
 variable "openai_model_id" {
@@ -53,9 +53,9 @@ variable "openai_model_id" {
 }
 
 variable "flink_cfu" {
-  description = "Number of Confluent Flink Units (CFUs) for the compute pool. 5 is the minimum, but this pipeline runs 6 continuous streaming statements (3 business + 3 AI derivations) which exhausts 5 CFU and leaves the 6th stuck PENDING forever - 10 gives headroom."
+  description = "Number of Confluent Flink Units (CFUs) for the compute pool. 5 is the minimum, but this pipeline runs 6 continuous streaming statements (3 business + 3 AI derivations) which exhausts 5 CFU and leaves the 6th stuck PENDING forever - 10 gives headroom. The AI_DETECT_ANOMALIES experiment (derive_vehicle_telemetry_ts + derive_driver_risk_events_anomaly) adds 2 more continuous jobs on top of that without its own CFU bump, saturating the pool at 10/10 - bumped to 20 (the next tier up; Confluent Cloud only allows 5/10/20/30/40/50) so the pool has real headroom again (observed as very infrequent checkpoint commits on the anomaly job when fully saturated, not a hard failure, but bad for a demo that needs anomalies to show up quickly)."
   type        = number
-  default     = 10
+  default     = 20
 }
 
 variable "openai_api_key" {

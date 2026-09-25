@@ -647,3 +647,176 @@ resource "confluent_flink_statement" "derive_ai_delivery_recommendations" {
     confluent_flink_statement.create_ai_delivery_recommendations,
   ]
 }
+
+# --- AI_DETECT_ANOMALIES experiment: replaces the fixed-threshold heuristic
+# in derive_driver_risk_events above with per-vehicle statistical anomaly
+# detection, so each vehicle is judged against its own driving baseline
+# instead of one global overspeed/harsh-braking cutoff. Written to a
+# separate driver.risk.events.anomaly topic (not a swap-in-place) so the
+# heuristic feed keeps running unchanged and the two can be compared
+# side by side in the console/demo.
+#
+# AI_DETECT_ANOMALIES(DOUBLE, TIMESTAMP(3)) needs its second argument to be
+# a genuine watermarked event-time attribute for its internal OVER
+# aggregation to accumulate state correctly across rows - a computed
+# TO_TIMESTAMP(...) expression ordered without its own declared watermark
+# was tested and silently produces null/single-row output (empirically
+# confirmed against the AI_DETECT_ANOMALIES rollout in rtce-bug-bash before
+# writing this). vehicle.telemetry's `datetime` is a plain STRING, so this
+# intermediate table parses it once into a real TIMESTAMP(3) column with
+# its own watermark for AI_DETECT_ANOMALIES to key off.
+#
+# The CREATE TABLE below still declares a zero-lag watermark
+# (`WATERMARK FOR event_ts AS event_ts`), but the live table's watermark was
+# adjusted out-of-band via `ALTER TABLE vehicle_telemetry_ts MODIFY WATERMARK
+# FOR event_ts AS event_ts - INTERVAL '0.001' SECOND` - the telemetry
+# simulator produces all 12 vehicles on the same 3s tick and truncates
+# `datetime` to whole seconds, so several vehicles legitimately land on the
+# identical per-second timestamp; a zero-lag watermark treats ties at the
+# current watermark as late data (Confluent's console surfaces this as a
+# "degraded" statement warning). Do not "fix" this by re-editing the
+# `statement` text below - the confluent_flink_statement resource treats
+# `statement` as force-new, so any edit here drops and recreates this topic
+# (and disconnects the two statements below that already point at it) rather
+# than updating the live watermark in place.
+
+resource "confluent_flink_statement" "create_vehicle_telemetry_ts" {
+  statement = <<-SQL
+    CREATE TABLE ${local.db}.vehicle_telemetry_ts (
+      vehicle_id STRING,
+      geozone STRING,
+      event_ts TIMESTAMP(3),
+      speed_kmh DOUBLE,
+      WATERMARK FOR event_ts AS event_ts
+    ) WITH (
+      'value.format' = 'json-registry'
+    )
+  SQL
+
+  properties = local.flink_statement_defaults
+
+  compute_pool { id = confluent_flink_compute_pool.ai_advisor.id }
+  principal { id = confluent_service_account.flink_runner.id }
+  environment { id = confluent_environment.fleet.id }
+  organization { id = data.confluent_organization.fleet.id }
+  credentials {
+    key    = confluent_api_key.flink_runner_key.id
+    secret = confluent_api_key.flink_runner_key.secret
+  }
+  rest_endpoint = data.confluent_flink_region.fleet.rest_endpoint
+
+  depends_on = [
+    confluent_role_binding.flink_runner_admin,
+    confluent_role_binding.flink_runner_cluster_admin,
+    confluent_role_binding.flink_runner_schema_registry,
+  ]
+}
+
+resource "confluent_flink_statement" "derive_vehicle_telemetry_ts" {
+  statement = <<-SQL
+    INSERT INTO ${local.db}.vehicle_telemetry_ts
+    SELECT
+      object_id AS vehicle_id,
+      geozone_ids[1] AS geozone,
+      TO_TIMESTAMP(SUBSTRING(REPLACE(`datetime`, 'T', ' '), 1, 23), 'yyyy-MM-dd HH:mm:ss.SSS') AS event_ts,
+      `position`.speed AS speed_kmh
+    FROM ${local.db}.`vehicle.telemetry`
+  SQL
+
+  properties = local.flink_statement_defaults
+
+  compute_pool { id = confluent_flink_compute_pool.ai_advisor.id }
+  principal { id = confluent_service_account.flink_runner.id }
+  environment { id = confluent_environment.fleet.id }
+  organization { id = data.confluent_organization.fleet.id }
+  credentials {
+    key    = confluent_api_key.flink_runner_key.id
+    secret = confluent_api_key.flink_runner_key.secret
+  }
+  rest_endpoint = data.confluent_flink_region.fleet.rest_endpoint
+
+  depends_on = [
+    confluent_flink_statement.create_vehicle_telemetry,
+    confluent_flink_statement.create_vehicle_telemetry_ts,
+  ]
+}
+
+resource "confluent_flink_statement" "create_driver_risk_events_anomaly" {
+  statement = <<-SQL
+    CREATE TABLE ${local.db}.`driver.risk.events.anomaly` (
+      vehicle_id STRING,
+      geozone STRING,
+      speed_kmh DOUBLE,
+      forecast_speed_kmh DOUBLE,
+      lower_bound DOUBLE,
+      upper_bound DOUBLE,
+      risk_level STRING,
+      event_time STRING
+    ) WITH (
+      'value.format' = 'json-registry'
+    )
+  SQL
+
+  properties = local.flink_statement_defaults
+
+  compute_pool { id = confluent_flink_compute_pool.ai_advisor.id }
+  principal { id = confluent_service_account.flink_runner.id }
+  environment { id = confluent_environment.fleet.id }
+  organization { id = data.confluent_organization.fleet.id }
+  credentials {
+    key    = confluent_api_key.flink_runner_key.id
+    secret = confluent_api_key.flink_runner_key.secret
+  }
+  rest_endpoint = data.confluent_flink_region.fleet.rest_endpoint
+
+  depends_on = [
+    confluent_role_binding.flink_runner_admin,
+    confluent_role_binding.flink_runner_cluster_admin,
+    confluent_role_binding.flink_runner_schema_registry,
+  ]
+}
+
+resource "confluent_flink_statement" "derive_driver_risk_events_anomaly" {
+  statement = <<-SQL
+    INSERT INTO ${local.db}.`driver.risk.events.anomaly`
+    SELECT
+      vehicle_id,
+      geozone,
+      speed_kmh,
+      anomaly.forecast_value AS forecast_speed_kmh,
+      anomaly.lower_bound AS lower_bound,
+      anomaly.upper_bound AS upper_bound,
+      CASE
+        WHEN ABS(speed_kmh - anomaly.forecast_value) > (anomaly.upper_bound - anomaly.lower_bound) THEN 'high'
+        ELSE 'medium'
+      END AS risk_level,
+      CAST(event_ts AS STRING) AS event_time
+    FROM (
+      SELECT
+        vehicle_id,
+        geozone,
+        event_ts,
+        speed_kmh,
+        AI_DETECT_ANOMALIES(speed_kmh, event_ts) OVER (PARTITION BY vehicle_id ORDER BY event_ts) AS anomaly
+      FROM ${local.db}.vehicle_telemetry_ts
+    )
+    WHERE anomaly.is_anomaly = TRUE
+  SQL
+
+  properties = local.flink_statement_defaults
+
+  compute_pool { id = confluent_flink_compute_pool.ai_advisor.id }
+  principal { id = confluent_service_account.flink_runner.id }
+  environment { id = confluent_environment.fleet.id }
+  organization { id = data.confluent_organization.fleet.id }
+  credentials {
+    key    = confluent_api_key.flink_runner_key.id
+    secret = confluent_api_key.flink_runner_key.secret
+  }
+  rest_endpoint = data.confluent_flink_region.fleet.rest_endpoint
+
+  depends_on = [
+    confluent_flink_statement.derive_vehicle_telemetry_ts,
+    confluent_flink_statement.create_driver_risk_events_anomaly,
+  ]
+}

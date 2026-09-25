@@ -8,7 +8,7 @@
 // surface of its own.
 //
 // context-engine.js automatically uses the REAL Confluent Cloud + Flink +
-// Bedrock pipeline if the required environment variables are set (see
+// OpenAI pipeline if the required environment variables are set (see
 // SETUP.md - get them with `terraform output` from the terraform/
 // directory), and falls back to an in-memory simulator otherwise.
 //
@@ -16,11 +16,18 @@
 //   npm install
 //   npm start
 
+// Must be the first import: context-engine.js reads its LIVE_ENV vars at
+// module-load time (isLiveModeConfigured() runs immediately), so .env has
+// to be loaded into process.env before that import below runs. A real
+// `export`ed shell env var always wins over .env (dotenv default), so this
+// is additive - nothing changes for anyone already using `export`.
+import 'dotenv/config';
+
 import { isLive } from './context-engine.js';
 import { startHttpServer } from './http-server.js';
 import { startTelemetrySimulator } from './telemetry-simulator.js';
 
-console.error(`[fleet-context-engine] mode: ${isLive ? 'LIVE (real Confluent Cloud + Flink + Bedrock)' : 'SIMULATED (in-memory, no Confluent Cloud env vars found)'}`);
+console.error(`[fleet-context-engine] mode: ${isLive ? 'LIVE (real Confluent Cloud + Flink + OpenAI)' : 'SIMULATED (in-memory, no Confluent Cloud env vars found)'}`);
 
 startHttpServer();
 
